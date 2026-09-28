@@ -19,7 +19,8 @@ public final class BlockPositions {
 
     /**
      * @return the position of the block at this location, or {@code null} if the location has no world
-     * (e.g. a detached location, or an inventory held by a non-block entity such as a hopper minecart).
+     * (e.g. a detached location, or an inventory held by a non-block entity such as a hopper minecart —
+     * which therefore can never be protected, since protection is only ever stored per block position).
      */
     public static BlockPosition ofLocationOrNull(Location location) {
         if (location == null || location.getWorld() == null) {

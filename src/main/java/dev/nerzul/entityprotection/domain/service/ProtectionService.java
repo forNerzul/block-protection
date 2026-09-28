@@ -3,6 +3,7 @@ package dev.nerzul.entityprotection.domain.service;
 import dev.nerzul.entityprotection.domain.model.BlockPosition;
 import dev.nerzul.entityprotection.domain.model.Protection;
 import dev.nerzul.entityprotection.domain.policy.AccessPolicy;
+import dev.nerzul.entityprotection.domain.policy.HopperTransferPolicy;
 import dev.nerzul.entityprotection.domain.port.GlobalTrustRepository;
 import dev.nerzul.entityprotection.domain.port.ProtectionRepository;
 
@@ -74,6 +75,32 @@ public final class ProtectionService {
             Set<UUID> globallyTrusted = globalTrustRepository.trustedBy(protection.get().owner());
             return AccessPolicy.canAccess(requester, protection.get(), globallyTrusted, adminBypass);
         }, false, "canAccess(" + position + ", " + requester + ")");
+    }
+
+    /**
+     * Hopper/hopper-minecart bypass prevention (see {@link HopperTransferPolicy}).
+     * {@code source}/{@code destination} may be {@code null} when the moving
+     * inventory has no block position (e.g. a hopper minecart), which this
+     * treats the same as "unprotected". Fails closed: {@code false} on error.
+     */
+    public boolean canTransfer(BlockPosition source, BlockPosition destination) {
+        if (source == null) {
+            return true;
+        }
+        return safely(() -> {
+            Optional<Protection> sourceProtection = protectionRepository.find(source);
+            if (sourceProtection.isEmpty()) {
+                return true;
+            }
+            Optional<Protection> destinationProtection = destination == null
+                    ? Optional.empty()
+                    : protectionRepository.find(destination);
+            if (destinationProtection.isEmpty()) {
+                return false;
+            }
+            Set<UUID> globallyTrusted = globalTrustRepository.trustedBy(sourceProtection.get().owner());
+            return HopperTransferPolicy.isTransferAllowed(sourceProtection.get(), destinationProtection.get(), globallyTrusted);
+        }, false, "canTransfer(" + source + " -> " + destination + ")");
     }
 
     private <T> T safely(Supplier<T> action, T safeFallback, String description) {

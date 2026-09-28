@@ -47,7 +47,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T7 fix(persistence): robustness (R3-corrupt-data-fail-open, R4-fail-open-on-corrupt-data, R4-global-trust-file-wipe, R4-hopper-hot-path-decode). Codec resilience to malformed/truncated lines and separator-bearing world names; fail-closed on unexpected lookup errors; atomic YAML save with backup-and-refuse on corruption and rollback on failed save; per-chunk decode cache invalidated on write/unload. Route: delegated (writer trigger).
 - [x] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
 - [x] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
-- [ ] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
+- [x] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
 - [ ] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 
 ## Acceptance criteria
@@ -323,6 +323,38 @@ stayed green).
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures.
 `./gradlew build` → BUILD SUCCESSFUL.
 
+### T10 fix(listeners): hopper rule
+
+- **R3-hopper-rule-blocks-protected-sources**: the old "same owner exactly"
+  rule was too strict (a trusted player's own hopper still couldn't drain a
+  container they were legitimately trusted on). New pure
+  `domain.policy.HopperTransferPolicy.isTransferAllowed(source, destination,
+  globallyTrustedBySourceOwner)`: unprotected source → always allowed;
+  protected source + unprotected destination → denied; protected source +
+  protected destination → allowed exactly when the destination's *owner*
+  would themselves pass `AccessPolicy.canAccess` against the source (owner,
+  per-block trusted, or globally trusted by the source's owner). TDD: 6 tests
+  written first → RED (`HopperTransferPolicy` didn't exist) → GREEN.
+  `ProtectionService.canTransfer(source, destination)` composes the two
+  repository lookups (fails closed to `false` on an unexpected error, same
+  `safely()` wrapper as T7) and calls the policy; `ProtectionHopperListener`
+  shrank to resolving both positions and calling it.
+- **BREWING_STAND**: confirmed via `javap` on the 26.2 jar that
+  `Material.BREWING_STAND` is real (non-legacy) and its block state
+  (`org.bukkit.block.BrewingStand`) implements `Container`; added to
+  `PaperProtectableTypePolicy`'s hardcoded container set so an owner's own
+  hopper can feed it.
+- **R2-minecart-doc-misleading**: `BlockPositions.ofLocationOrNull` and
+  `ProtectionHopperListener`'s Javadoc now say plainly that a hopper minecart
+  has no block position and therefore can never be protected, so it can never
+  drain a protected container — not "must be protected by the same owner"
+  (the old, now-inaccurate wording). README's "Hopper rule" section and its
+  manual-test-checklist line rewritten to match the real behavior, and the
+  container feature list now mentions brewing stands.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 56 tests, 0 failures (6 new:
+`HopperTransferPolicyTest`). `./gradlew build` → BUILD SUCCESSFUL.
+
 ## Next step
-T10 (hopper rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — both
-authorized, not yet implemented as of this entry.
+T11 (drop hardcoded `org.gradle.java.home`) — authorized, not yet implemented
+as of this entry.

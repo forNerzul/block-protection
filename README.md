@@ -13,7 +13,7 @@ region/land claims. Only blocks are protected.
 - **Auto-protect on place.** Containers are protected the instant they are
   placed: chests, trapped chests, barrels, shulker boxes (any color, and the
   new 26.2 copper chest in every oxidation stage), furnaces/blast
-  furnaces/smokers, dispensers, droppers and hoppers.
+  furnaces/smokers, dispensers, droppers, hoppers and brewing stands.
 - **Doors, trapdoors and fence gates** (any wood type, iron, and the new 26.2
   copper variants) are protected too, but only if `protect-doors: true` in
   `config.yml` (default: `false`).
@@ -28,9 +28,9 @@ region/land claims. Only blocks are protected.
   placing, breaking, trusting, untrusting or removing protection on either
   half applies to both.
 - **Bypass prevention:**
-  - Hoppers and hopper minecarts cannot drain a protected container unless the
-    hopper/minecart is itself protected by the *same* owner (see
-    [Hopper rule](#hopper-rule) below for the exact behavior).
+  - Hoppers cannot drain a protected container into a destination its owner
+    could not otherwise access; hopper minecarts can never drain one at all
+    (see [Hopper rule](#hopper-rule) below for the exact behavior).
   - Explosions (creepers, TNT, beds, respawn anchors, ...) never destroy a
     protected block.
   - Pistons cannot push or pull a protected block.
@@ -50,11 +50,22 @@ region/land claims. Only blocks are protected.
 ### Hopper rule
 
 Pulling items **out of** a protected container (via a hopper or a hopper
-minecart) is only allowed when the hopper/minecart itself is protected by the
-*same* owner as the container. Otherwise the transfer is cancelled. Pushing
-items **into** a protected container is always left allowed, since it cannot
-leak anything from the protected side and would otherwise break the common
-"feed a protected chest from an unprotected hopper" setup.
+minecart) is only allowed when the destination is itself a protected block
+whose owner already has access to the source — as the source's owner, a
+player trusted on that specific source, or a player the source's owner
+globally trusts. This is the exact same check ([`AccessPolicy`][access-policy])
+used when a player opens the source directly, just applied to the
+destination's owner instead. An unprotected destination is always denied,
+which includes **every hopper minecart**: its inventory has no block
+position, so it can never be protected in the first place, and can therefore
+never drain a protected container.
+
+Pushing items **into** a protected container from an unprotected source is
+always left allowed, since it cannot leak anything from the protected side
+and would otherwise break the common "feed a protected chest from an
+unprotected hopper" setup.
+
+[access-policy]: src/main/java/dev/nerzul/entityprotection/domain/policy/AccessPolicy.java
 
 ## Configuration (`config.yml`)
 
@@ -138,8 +149,10 @@ other) to verify the acceptance criteria:
       protected and usable by A.
 - [ ] Player C (a third, untrusted player) tries to place a chest against a
       chest owned by player A: placement is blocked, no double chest forms.
-- [ ] A hopper placed by player B under player A's chest does not drain it. A
-      hopper placed by player A under their own chest does drain it.
+- [ ] A hopper placed by player B (untrusted) under player A's chest does not
+      drain it. A hopper placed by player A under their own chest, or by
+      trusted player B under *their own* protected hopper, does drain it. A
+      hopper minecart under the chest never drains it either.
 - [ ] TNT/creeper explosion next to the chest leaves the chest standing.
 - [ ] A piston cannot push or retract the chest.
 - [ ] Fire spreading nearby does not burn the chest down (needs a flammable

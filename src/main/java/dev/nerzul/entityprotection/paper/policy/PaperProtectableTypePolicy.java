@@ -20,10 +20,13 @@ public final class PaperProtectableTypePolicy implements ProtectableTypePolicy {
     /**
      * Containers with no dedicated block tag in the Bukkit API: the classic
      * chest/trapped chest (copper chest variants are covered by
-     * {@link Tag#COPPER_CHESTS}), the barrel, the three furnace variants, and
-     * the three "hopper family" redstone containers. {@code ENDER_CHEST} is
-     * intentionally excluded: its inventory is per-player, not per-block, so
-     * per-owner protection does not apply to it.
+     * {@link Tag#COPPER_CHESTS}), the barrel, the three furnace variants, the
+     * three "hopper family" redstone containers, and the brewing stand
+     * (confirmed a real, non-legacy {@code Material} implementing
+     * {@code org.bukkit.block.Container} in the 26.2 jar via {@code javap}) so
+     * an owner's own hopper can feed it. {@code ENDER_CHEST} is intentionally
+     * excluded: its inventory is per-player, not per-block, so per-owner
+     * protection does not apply to it.
      */
     private static final Set<Material> CONTAINER_MATERIALS = Set.of(
             Material.CHEST,
@@ -34,7 +37,8 @@ public final class PaperProtectableTypePolicy implements ProtectableTypePolicy {
             Material.SMOKER,
             Material.DISPENSER,
             Material.DROPPER,
-            Material.HOPPER
+            Material.HOPPER,
+            Material.BREWING_STAND
     );
 
     @Override
