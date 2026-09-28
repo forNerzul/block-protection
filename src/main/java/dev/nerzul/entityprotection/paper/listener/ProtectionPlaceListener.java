@@ -9,10 +9,10 @@ import dev.nerzul.entityprotection.domain.service.ProtectionService;
 import dev.nerzul.entityprotection.paper.config.Messages;
 import dev.nerzul.entityprotection.paper.config.ProtectionConfig;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
+import dev.nerzul.entityprotection.paper.util.DoorHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.Bisected;
 import org.bukkit.block.data.type.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -62,11 +62,11 @@ public final class ProtectionPlaceListener implements Listener {
 
         protectionService.protect(position, owner);
 
-        if (category == ProtectableCategory.DOOR && block.getBlockData() instanceof Bisected bisected) {
-            Block otherHalf = bisected.getHalf() == Bisected.Half.BOTTOM
-                    ? block.getRelative(BlockFace.UP)
-                    : block.getRelative(BlockFace.DOWN);
-            protectionService.protect(BlockPositions.of(otherHalf), owner);
+        if (category == ProtectableCategory.DOOR) {
+            Block otherHalf = DoorHalves.otherHalfOrNull(block);
+            if (otherHalf != null) {
+                protectionService.protect(BlockPositions.of(otherHalf), owner);
+            }
         }
 
         event.getPlayer().sendMessage(messages.protectedPlace());

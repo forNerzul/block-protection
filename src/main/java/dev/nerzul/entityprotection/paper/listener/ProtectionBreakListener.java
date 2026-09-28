@@ -5,10 +5,9 @@ import dev.nerzul.entityprotection.domain.model.Protection;
 import dev.nerzul.entityprotection.domain.service.ProtectionService;
 import dev.nerzul.entityprotection.paper.config.Messages;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
+import dev.nerzul.entityprotection.paper.util.DoorHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.Bisected;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -50,16 +49,10 @@ public final class ProtectionBreakListener implements Listener {
         }
 
         protectionService.forceRemoveProtection(position);
-        cleanupDoorPair(block);
-    }
 
-    private void cleanupDoorPair(Block block) {
-        if (!(block.getBlockData() instanceof Bisected bisected)) {
-            return;
+        Block otherHalf = DoorHalves.otherHalfOrNull(block);
+        if (otherHalf != null) {
+            protectionService.forceRemoveProtection(BlockPositions.of(otherHalf));
         }
-        Block otherHalf = bisected.getHalf() == Bisected.Half.BOTTOM
-                ? block.getRelative(BlockFace.UP)
-                : block.getRelative(BlockFace.DOWN);
-        protectionService.forceRemoveProtection(BlockPositions.of(otherHalf));
     }
 }

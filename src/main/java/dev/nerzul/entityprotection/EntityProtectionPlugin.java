@@ -4,6 +4,8 @@ import dev.nerzul.entityprotection.domain.policy.ProtectableTypePolicy;
 import dev.nerzul.entityprotection.domain.port.GlobalTrustRepository;
 import dev.nerzul.entityprotection.domain.port.ProtectionRepository;
 import dev.nerzul.entityprotection.domain.service.ProtectionService;
+import dev.nerzul.entityprotection.paper.command.ProtectCommand;
+import dev.nerzul.entityprotection.paper.command.ProtectTabCompleter;
 import dev.nerzul.entityprotection.paper.config.Messages;
 import dev.nerzul.entityprotection.paper.config.ProtectionConfig;
 import dev.nerzul.entityprotection.paper.listener.ProtectionAccessListener;
@@ -45,8 +47,19 @@ public final class EntityProtectionPlugin extends JavaPlugin {
         Messages messages = new Messages(getConfig());
 
         registerListeners(classifier, config, messages);
+        registerCommand(messages);
 
         getLogger().info("EntityProtection enabled.");
+    }
+
+    private void registerCommand(Messages messages) {
+        var protectCommand = getCommand("protect");
+        if (protectCommand == null) {
+            getLogger().severe("Command 'protect' is missing from plugin.yml; /protect will not work.");
+            return;
+        }
+        protectCommand.setExecutor(new ProtectCommand(protectionService, messages));
+        protectCommand.setTabCompleter(new ProtectTabCompleter());
     }
 
     private void registerListeners(ProtectableTypePolicy classifier, ProtectionConfig config, Messages messages) {
