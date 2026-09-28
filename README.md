@@ -105,7 +105,11 @@ trust list and need no target block).
 
 ## Building
 
-Requires Java 25 and Gradle (a wrapper is checked in).
+Requires Java 25 and Gradle (a wrapper is checked in). `build.gradle.kts`
+declares a Java 25 toolchain for *compiling and running* the project, but
+Gradle itself still needs a JVM to launch the build in the first place; it
+auto-detects one (via `JAVA_HOME`, `PATH`, or its own toolchain
+auto-provisioning) on most machines without any extra setup.
 
 ```bash
 ./gradlew build
@@ -114,6 +118,16 @@ Requires Java 25 and Gradle (a wrapper is checked in).
 The plugin jar is produced at `build/libs/entity-protection-1.0.0.jar`.
 
 Run just the tests with `./gradlew test`.
+
+If Gradle can't find a suitable JVM on your machine (for example: `Unable to
+locate a Java Runtime` or a toolchain resolution error), point it at one —
+without hardcoding a path in this repo, so the project stays portable across
+machines and CI:
+
+- Per shell session: `export JAVA_HOME=/path/to/a/jdk` before running `./gradlew`.
+- Per user, for every project: add `org.gradle.java.home=/path/to/a/jdk` to
+  `~/.gradle/gradle.properties` (outside this repo, so it never gets
+  committed).
 
 ## Deploying
 

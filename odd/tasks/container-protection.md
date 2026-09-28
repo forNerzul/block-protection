@@ -48,7 +48,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
 - [x] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
 - [x] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
-- [ ] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
+- [x] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 
 ## Acceptance criteria
 - A non-owner cannot open, break, or hopper-drain a protected chest.
@@ -355,6 +355,30 @@ Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures.
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 56 tests, 0 failures (6 new:
 `HopperTransferPolicyTest`). `./gradlew build` → BUILD SUCCESSFUL.
 
+### T11 chore(build): drop the hardcoded `org.gradle.java.home`
+
+- **R2-gradle-java-home / R3-hardcoded-java-home**: deleted `gradle.properties`
+  (its only content was `org.gradle.java.home=/Library/Java/VirtualMachines/
+  temurin-25.jdk/...`, a path specific to this machine, which would break the
+  build for any other contributor or CI runner). `build.gradle.kts`'s
+  `java.toolchain.languageVersion = 25` already handles compiling/running the
+  project; Gradle itself still needs some JVM to launch, but auto-detects one
+  via `JAVA_HOME`/`PATH`/its own toolchain provisioning without that file.
+  Verified locally: stopped the running Gradle daemons (`./gradlew --stop`,
+  so the next run couldn't reuse one started under the old pinned path),
+  then `./gradlew clean build` → BUILD SUCCESSFUL, and `./gradlew -v`
+  confirms it fell back to "current Java home" (still Temurin 25 on this
+  machine, resolved from `PATH`/`java_home`, not from a committed setting).
+  README's "Building" section now documents the two supported ways to point
+  Gradle at a JDK without hardcoding a path in the repo: `export JAVA_HOME=...`
+  per shell session, or `~/.gradle/gradle.properties` (user-level, outside
+  the repo — not edited by this change, only documented as an option).
+
+Checks: `./gradlew clean build` → BUILD SUCCESSFUL, 56 tests, 0 failures
+(same as T10 — no code changed, only `gradle.properties` removed and the
+README updated).
+
 ## Next step
-T11 (drop hardcoded `org.gradle.java.home`) — authorized, not yet implemented
-as of this entry.
+All authorized work (T7-T11) is implemented. Feature complete pending the
+user's manual in-game verification (README checklist) after deploying the
+built jar.
