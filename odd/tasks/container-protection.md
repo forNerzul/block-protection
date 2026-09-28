@@ -52,7 +52,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T12 fix(persistence): malformed lines must fail closed and never be erased (R3-codec-skip-erases-and-fails-open). Codec result carries decoded entries + raw undecodable lines (re-embedded verbatim on every write); position-extractable corruption denies non-admins at that position with an unknown owner, chunk-wide corruption denies non-admins on every unrecorded protectable block in that chunk; admin bypass still works. Route: delegated.
 - [x] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
 - [x] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
-- [ ] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
+- [x] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
 
 ## Acceptance criteria
 - A non-owner cannot open, break, or hopper-drain a protected chest.
@@ -481,6 +481,25 @@ machine before keeping it.
 
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures (same
 count: this replaced one existing test's mechanism, no new test added).
+`./gradlew build` → BUILD SUCCESSFUL.
+
+### T15 test(domain): cover `ProtectionService` fail-closed paths
+
+Added throwing capability to the existing `InMemoryProtectionRepository`
+(`throwOnFind`) and `InMemoryGlobalTrustRepository` (`throwOnTrustedBy`,
+`trustSucceeds`, `untrustSucceeds`) fakes, plus 8 new tests: `canTransfer`
+with a null source (always allowed) and a null destination (denied once the
+source is protected); `canTransfer` failing closed to `false` when the
+protection repository or the global-trust lookup throws; `canAccess` failing
+closed to `false` and `isProtected` failing closed to `true` when the
+repository throws; `trustAll`/`untrustAll` reporting `STORAGE_ERROR` when the
+underlying persist call reports failure. TDD: RED first (compile errors —
+the throwing fields didn't exist on the fakes yet), then added them → GREEN.
+No bug was uncovered: `ProtectionService`'s fail-closed behavior (built in
+T7/T10) was already correct against every one of these paths, so no
+production code changed.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 78 tests, 0 failures (8 new).
 `./gradlew build` → BUILD SUCCESSFUL.
 
 - Pending: manual in-game verification by the user (README checklist).

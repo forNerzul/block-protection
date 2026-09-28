@@ -143,11 +143,74 @@ class ProtectionServiceTest {
         assertFalse(globalTrustRepository.trustedBy(owner).contains(trusted));
     }
 
+    @Test
+    void canTransferAllowsWhenSourceIsNull() {
+        assertTrue(service.canTransfer(null, position));
+        assertTrue(service.canTransfer(null, null));
+    }
+
+    @Test
+    void canTransferDeniesAnUnprotectedNullDestination() {
+        service.protect(position, owner);
+
+        assertFalse(service.canTransfer(position, null));
+    }
+
+    @Test
+    void canTransferFailsClosedWhenTheProtectionRepositoryThrows() {
+        service.protect(position, owner);
+        protectionRepository.throwOnFind = true;
+
+        assertFalse(service.canTransfer(position, new BlockPosition("world", 9, 9, 9)));
+    }
+
+    @Test
+    void canTransferFailsClosedWhenTheGlobalTrustLookupThrows() {
+        BlockPosition destination = new BlockPosition("world", 9, 9, 9);
+        service.protect(position, owner);
+        service.protect(destination, stranger);
+        globalTrustRepository.throwOnTrustedBy = true;
+
+        assertFalse(service.canTransfer(position, destination));
+    }
+
+    @Test
+    void canAccessFailsClosedWhenTheProtectionRepositoryThrows() {
+        protectionRepository.throwOnFind = true;
+
+        assertFalse(service.canAccess(position, stranger, false));
+    }
+
+    @Test
+    void isProtectedFailsClosedWhenTheProtectionRepositoryThrows() {
+        protectionRepository.throwOnFind = true;
+
+        assertTrue(service.isProtected(position));
+    }
+
+    @Test
+    void trustAllReportsStorageErrorWhenPersistingFails() {
+        globalTrustRepository.trustSucceeds = false;
+
+        assertEquals(ModificationResult.STORAGE_ERROR, service.trustAll(owner, trusted));
+    }
+
+    @Test
+    void untrustAllReportsStorageErrorWhenPersistingFails() {
+        globalTrustRepository.untrustSucceeds = false;
+
+        assertEquals(ModificationResult.STORAGE_ERROR, service.untrustAll(owner, trusted));
+    }
+
     private static final class InMemoryProtectionRepository implements ProtectionRepository {
         private final Map<BlockPosition, Protection> store = new HashMap<>();
+        private boolean throwOnFind;
 
         @Override
         public Optional<Protection> find(BlockPosition position) {
+            if (throwOnFind) {
+                throw new RuntimeException("simulated protection repository failure");
+            }
             return Optional.ofNullable(store.get(position));
         }
 
@@ -164,20 +227,32 @@ class ProtectionServiceTest {
 
     private static final class InMemoryGlobalTrustRepository implements GlobalTrustRepository {
         private final Map<UUID, Set<UUID>> store = new HashMap<>();
+        private boolean throwOnTrustedBy;
+        private boolean trustSucceeds = true;
+        private boolean untrustSucceeds = true;
 
         @Override
         public Set<UUID> trustedBy(UUID owner) {
+            if (throwOnTrustedBy) {
+                throw new RuntimeException("simulated global trust repository failure");
+            }
             return store.getOrDefault(owner, Set.of());
         }
 
         @Override
         public boolean trust(UUID owner, UUID trustedPlayer) {
+            if (!trustSucceeds) {
+                return false;
+            }
             store.computeIfAbsent(owner, k -> new HashSet<>()).add(trustedPlayer);
             return true;
         }
 
         @Override
         public boolean untrust(UUID owner, UUID trustedPlayer) {
+            if (!untrustSucceeds) {
+                return false;
+            }
             Set<UUID> existing = store.get(owner);
             if (existing != null) {
                 existing.remove(trustedPlayer);
