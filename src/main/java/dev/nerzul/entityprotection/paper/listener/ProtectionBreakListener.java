@@ -51,8 +51,10 @@ public final class ProtectionBreakListener implements Listener {
         protectionService.forceRemoveProtection(position);
 
         Block otherHalf = DoorHalves.otherHalfOrNull(block);
-        if (otherHalf != null) {
-            protectionService.forceRemoveProtection(BlockPositions.of(otherHalf));
+        if (otherHalf != null && otherHalf.getType() == block.getType()) {
+            protectionService.find(BlockPositions.of(otherHalf))
+                    .filter(protection.get()::sharesOwnerWith)
+                    .ifPresent(ignored -> protectionService.forceRemoveProtection(BlockPositions.of(otherHalf)));
         }
     }
 }

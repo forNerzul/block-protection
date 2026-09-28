@@ -34,6 +34,15 @@ public final class Protection {
         return owner.equals(player);
     }
 
+    /**
+     * Guard used before mirroring an operation onto a paired block (a door's
+     * other half, a double chest's other half): never act on {@code other} if
+     * it belongs to a different owner.
+     */
+    public boolean sharesOwnerWith(Protection other) {
+        return other != null && owner.equals(other.owner);
+    }
+
     public boolean isTrusted(UUID player) {
         return trustedPlayers.contains(player);
     }

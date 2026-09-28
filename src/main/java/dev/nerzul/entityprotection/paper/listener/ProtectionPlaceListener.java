@@ -56,7 +56,8 @@ public final class ProtectionPlaceListener implements Listener {
         BlockPosition position = BlockPositions.of(block);
 
         if (category == ProtectableCategory.CONTAINER && block.getBlockData() instanceof Chest chestData) {
-            handleChestPlacement(event, block, chestData, position, owner);
+            boolean adminBypass = event.getPlayer().hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
+            handleChestPlacement(event, block, chestData, position, owner, adminBypass);
             return;
         }
 
@@ -73,7 +74,7 @@ public final class ProtectionPlaceListener implements Listener {
     }
 
     private void handleChestPlacement(BlockPlaceEvent event, Block block, Chest chestData,
-                                       BlockPosition position, UUID owner) {
+                                       BlockPosition position, UUID owner, boolean adminBypass) {
         if (chestData.getType() == Chest.Type.SINGLE) {
             protectionService.protect(position, owner);
             event.getPlayer().sendMessage(messages.protectedPlace());
@@ -89,7 +90,7 @@ public final class ProtectionPlaceListener implements Listener {
         }
 
         Optional<Protection> neighborProtection = protectionService.find(BlockPositions.of(neighbor));
-        if (neighborProtection.isPresent() && !neighborProtection.get().isOwner(owner)) {
+        if (neighborProtection.isPresent() && !neighborProtection.get().isOwner(owner) && !adminBypass) {
             event.setCancelled(true);
             Player player = event.getPlayer();
             player.sendMessage(messages.noAccess(PlayerNames.resolve(neighborProtection.get().owner())));
@@ -105,21 +106,17 @@ public final class ProtectionPlaceListener implements Listener {
     }
 
     /**
-     * Scans the four cardinal neighbors for the other half of the double chest
-     * Minecraft just formed by this placement (same material, joined type,
-     * matching facing).
+     * Finds the joined neighbor via the two directions perpendicular to our
+     * facing (the only axis chests join on), never via the neighbor's own
+     * {@code Chest.Type} (may still read {@code SINGLE}: a deferred update).
      */
     private Block findJoinedNeighbor(Block block, Chest chestData) {
-        BlockFace[] faces = {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST};
-        for (BlockFace face : faces) {
+        for (BlockFace face : perpendicularFaces(chestData.getFacing())) {
             Block candidate = block.getRelative(face);
             if (candidate.getType() != block.getType()) {
                 continue;
             }
             if (!(candidate.getBlockData() instanceof Chest candidateData)) {
-                continue;
-            }
-            if (candidateData.getType() == Chest.Type.SINGLE) {
                 continue;
             }
             if (candidateData.getFacing() != chestData.getFacing()) {
@@ -128,5 +125,13 @@ public final class ProtectionPlaceListener implements Listener {
             return candidate;
         }
         return null;
+    }
+
+    private BlockFace[] perpendicularFaces(BlockFace facing) {
+        return switch (facing) {
+            case NORTH, SOUTH -> new BlockFace[] {BlockFace.EAST, BlockFace.WEST};
+            case EAST, WEST -> new BlockFace[] {BlockFace.NORTH, BlockFace.SOUTH};
+            default -> new BlockFace[0];
+        };
     }
 }

@@ -89,7 +89,8 @@ public final class ProtectCommand implements CommandExecutor {
         if (block == null) {
             return;
         }
-        if (findOrExplain(player, block).isEmpty()) {
+        Optional<Protection> protection = findOrExplain(player, block);
+        if (protection.isEmpty()) {
             return;
         }
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
@@ -98,8 +99,10 @@ public final class ProtectCommand implements CommandExecutor {
 
         if (result == ModificationResult.SUCCESS) {
             Block otherHalf = DoorHalves.otherHalfOrNull(block);
-            if (otherHalf != null) {
-                protectionService.forceRemoveProtection(BlockPositions.of(otherHalf));
+            if (otherHalf != null && otherHalf.getType() == block.getType()) {
+                protectionService.find(BlockPositions.of(otherHalf))
+                        .filter(protection.get()::sharesOwnerWith)
+                        .ifPresent(ignored -> protectionService.forceRemoveProtection(BlockPositions.of(otherHalf)));
             }
         }
         respond(player, result, messages.removed());

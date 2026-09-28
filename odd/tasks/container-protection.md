@@ -167,6 +167,30 @@ commits; no remote, so work-unit commits only, no PR).
   plugin defaults.
 - Nothing required stopping to ask the user; no blocked/partial items.
 
+### Correction: native review findings R1, R3, R4
+
+Native review found 3 candidate-caused CRITICAL findings after T1-T6; applied
+one bounded correction (~119 authored changed lines):
+
+- **R1 (double-chest join bypass)**: `findJoinedNeighbor` no longer gates on
+  the neighbor's own `Chest.Type` (unreliable: can still read `SINGLE` at
+  `BlockPlaceEvent` time), only on the two directions perpendicular to our own
+  facing. Admin bypass now mirrors instead of blindly assigning ownership.
+  `ProtectionAccessListener` now requires access on BOTH halves of a
+  `DoubleChest` (via `Container`/`DoubleChest.getLeftSide/RightSide`).
+- **R3 (trapdoor treated as bisected door)**: `DoorHalves.otherHalfOrNull` now
+  matches only `org.bukkit.block.data.type.Door`, not any `Bisected` (which
+  also matches single-block `TrapDoor`/`Stairs`).
+- **R4 (neighbor wipe)**: `ProtectionBreakListener` and `ProtectCommand#handleRemove`
+  now only force-remove the "other half" if it has the same material and its
+  protection `sharesOwnerWith` the primary block's protection (new pure
+  `Protection.sharesOwnerWith`, TDD: RED — `ProtectionTest` referenced the
+  missing method, compile failure — then GREEN, 43 tests total).
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 43 tests, 0 failures.
+`./gradlew build` → BUILD SUCCESSFUL. `git show --stat HEAD` on the correction
+commit: 7 files changed, 89 insertions(+), 30 deletions(-).
+
 ## Next step
 Feature complete pending the user's manual in-game verification (README
 checklist) after deploying the built jar.

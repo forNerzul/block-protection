@@ -75,4 +75,15 @@ class ProtectionTest {
     void ownerMustNotBeNull() {
         assertThrows(NullPointerException.class, () -> new Protection(null));
     }
+
+    @Test
+    void sharesOwnerWithIsTrueOnlyForTheSameOwner() {
+        Protection ownedByOwner = new Protection(owner);
+        Protection alsoOwnedByOwner = new Protection(owner);
+        Protection ownedByStranger = new Protection(stranger);
+
+        assertTrue(ownedByOwner.sharesOwnerWith(alsoOwnedByOwner));
+        assertFalse(ownedByOwner.sharesOwnerWith(ownedByStranger));
+        assertFalse(ownedByOwner.sharesOwnerWith(null));
+    }
 }
