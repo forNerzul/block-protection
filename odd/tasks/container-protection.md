@@ -51,7 +51,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 - [x] T12 fix(persistence): malformed lines must fail closed and never be erased (R3-codec-skip-erases-and-fails-open). Codec result carries decoded entries + raw undecodable lines (re-embedded verbatim on every write); position-extractable corruption denies non-admins at that position with an unknown owner, chunk-wide corruption denies non-admins on every unrecorded protectable block in that chunk; admin bypass still works. Route: delegated.
 - [x] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
-- [ ] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
+- [x] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
 - [ ] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
 
 ## Acceptance criteria
@@ -464,6 +464,23 @@ PluginManager dispatch, so this is a Paper adapter without a test harness,
 verified with `./gradlew build`; 70 existing tests stayed green.
 
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures.
+`./gradlew build` → BUILD SUCCESSFUL.
+
+### T14 test(persistence): deterministic rollback trigger
+
+Replaced the POSIX read-only-directory trick in
+`aFailedSaveRollsBackTheInMemoryChangeAndReportsFailure` (non-deterministic:
+`Files.getPosixFilePermissions` throws on Windows, and root ignores
+permission bits entirely) with deleting the target file and replacing it
+with an actual directory of the same name before the second `trust()` call.
+No file system lets an atomic move replace an existing directory with a
+regular file, on any OS, regardless of privilege level, so `persist()`'s
+`Files.move` fails the same way every time. Ran it in isolation first to
+confirm it reproduces the failure (and therefore the rollback) on this
+machine before keeping it.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures (same
+count: this replaced one existing test's mechanism, no new test added).
 `./gradlew build` → BUILD SUCCESSFUL.
 
 - Pending: manual in-game verification by the user (README checklist).

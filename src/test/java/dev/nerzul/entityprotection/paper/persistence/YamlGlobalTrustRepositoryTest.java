@@ -8,8 +8,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
 import java.util.UUID;
 
@@ -125,19 +123,18 @@ class YamlGlobalTrustRepositoryTest {
         YamlGlobalTrustRepository repository = new YamlGlobalTrustRepository(file);
         assertTrue(repository.trust(owner, trusted));
 
-        File parent = file.getParentFile();
-        Set<PosixFilePermission> original = Files.getPosixFilePermissions(parent.toPath());
-        try {
-            Files.setPosixFilePermissions(parent.toPath(), PosixFilePermissions.fromString("r-xr-xr-x"));
+        // Deterministic, OS- and privilege-independent failure: no file system lets
+        // an atomic move replace an existing directory with a regular file, so this
+        // fails the same way on every OS and even when running as root, unlike a
+        // POSIX read-only permission (which root simply ignores).
+        assertTrue(file.delete());
+        Files.createDirectory(file.toPath());
 
-            UUID secondTrusted = UUID.randomUUID();
-            boolean result = repository.trust(owner, secondTrusted);
+        UUID secondTrusted = UUID.randomUUID();
+        boolean result = repository.trust(owner, secondTrusted);
 
-            assertFalse(result);
-            assertFalse(repository.trustedBy(owner).contains(secondTrusted));
-            assertTrue(repository.trustedBy(owner).contains(trusted));
-        } finally {
-            Files.setPosixFilePermissions(parent.toPath(), original);
-        }
+        assertFalse(result);
+        assertFalse(repository.trustedBy(owner).contains(secondTrusted));
+        assertTrue(repository.trustedBy(owner).contains(trusted));
     }
 }
