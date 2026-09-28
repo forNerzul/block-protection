@@ -13,6 +13,7 @@ import dev.nerzul.entityprotection.paper.listener.ProtectionBreakListener;
 import dev.nerzul.entityprotection.paper.listener.ProtectionBurnListener;
 import dev.nerzul.entityprotection.paper.listener.ProtectionExplosionListener;
 import dev.nerzul.entityprotection.paper.listener.ProtectionHopperListener;
+import dev.nerzul.entityprotection.paper.listener.ProtectionPhysicsCleanupListener;
 import dev.nerzul.entityprotection.paper.listener.ProtectionPistonListener;
 import dev.nerzul.entityprotection.paper.listener.ProtectionPlaceListener;
 import dev.nerzul.entityprotection.paper.persistence.ChunkProtectionRepository;
@@ -71,6 +72,7 @@ public final class EntityProtectionPlugin extends JavaPlugin {
         pluginManager.registerEvents(new ProtectionExplosionListener(protectionService), this);
         pluginManager.registerEvents(new ProtectionPistonListener(protectionService), this);
         pluginManager.registerEvents(new ProtectionBurnListener(protectionService), this);
+        pluginManager.registerEvents(new ProtectionPhysicsCleanupListener(protectionService), this);
     }
 
     @Override

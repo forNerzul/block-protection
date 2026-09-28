@@ -8,6 +8,9 @@ import dev.nerzul.entityprotection.paper.util.BlockPositions;
 import dev.nerzul.entityprotection.paper.util.DoorHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Bisected;
+import org.bukkit.block.data.type.Door;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,7 +24,11 @@ import static dev.nerzul.entityprotection.paper.listener.ProtectionAccessListene
 
 /**
  * Denies breaking a protected block to anyone without access, and cleans up
- * protection data (both halves, for a door) once an authorized break goes through.
+ * protection data (both halves, for a door) once an authorized break goes
+ * through. Also denies breaking the block a protected, inaccessible door
+ * rests on: Minecraft pops the door off (and drops it) the instant its
+ * supporting block is removed, which would otherwise bypass the door's own
+ * protection entirely.
  */
 public final class ProtectionBreakListener implements Listener {
 
@@ -49,15 +56,24 @@ public final class ProtectionBreakListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        if (protection.isEmpty()) {
+        Player player = event.getPlayer();
+        boolean adminBypass = player.hasPermission(ADMIN_PERMISSION);
+
+        if (protection.isPresent() && !protectionService.canAccess(position, player.getUniqueId(), adminBypass)) {
+            event.setCancelled(true);
+            player.sendMessage(messages.noAccess(PlayerNames.resolve(protection.get().owner())));
             return;
         }
 
-        Player player = event.getPlayer();
-        boolean adminBypass = player.hasPermission(ADMIN_PERMISSION);
-        if (!protectionService.canAccess(position, player.getUniqueId(), adminBypass)) {
+        BlockPosition supportedDoor = supportedInaccessibleDoor(block, player, adminBypass);
+        if (supportedDoor != null) {
             event.setCancelled(true);
-            player.sendMessage(messages.noAccess(PlayerNames.resolve(protection.get().owner())));
+            protectionService.find(supportedDoor)
+                    .ifPresent(doorProtection -> player.sendMessage(messages.noAccess(PlayerNames.resolve(doorProtection.owner()))));
+            return;
+        }
+
+        if (protection.isEmpty()) {
             return;
         }
 
@@ -69,5 +85,19 @@ public final class ProtectionBreakListener implements Listener {
                     .filter(protection.get()::sharesOwnerWith)
                     .ifPresent(ignored -> protectionService.forceRemoveProtection(BlockPositions.of(otherHalf)));
         }
+    }
+
+    /**
+     * @return the position of the door bottom-half resting on {@code block},
+     * if breaking {@code block} would pop it off and the breaker cannot
+     * access it; {@code null} otherwise (no door on top, or it's accessible).
+     */
+    private BlockPosition supportedInaccessibleDoor(Block block, Player player, boolean adminBypass) {
+        Block above = block.getRelative(BlockFace.UP);
+        if (!(above.getBlockData() instanceof Door door) || door.getHalf() != Bisected.Half.BOTTOM) {
+            return null;
+        }
+        BlockPosition doorPosition = BlockPositions.of(above);
+        return protectionService.canAccess(doorPosition, player.getUniqueId(), adminBypass) ? null : doorPosition;
     }
 }

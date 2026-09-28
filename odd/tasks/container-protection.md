@@ -45,7 +45,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T5 Commands + permissions + messages. Route: delegated.
 - [x] T6 README with build/install/test instructions; final `gradle build`. Route: delegated.
 - [x] T7 fix(persistence): robustness (R3-corrupt-data-fail-open, R4-fail-open-on-corrupt-data, R4-global-trust-file-wipe, R4-hopper-hot-path-decode). Codec resilience to malformed/truncated lines and separator-bearing world names; fail-closed on unexpected lookup errors; atomic YAML save with backup-and-refuse on corruption and rollback on failed save; per-chunk decode cache invalidated on write/unload. Route: delegated (writer trigger).
-- [ ] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
+- [x] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
 - [ ] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
 - [ ] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
 - [ ] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
@@ -250,7 +250,40 @@ Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures (7 new: 3 in
 `ChunkProtectionCodecTest`, 4 in `YamlGlobalTrustRepositoryTest`).
 `./gradlew build` → BUILD SUCCESSFUL.
 
+### T8 fix(listeners): destruction bypasses
+
+- **R1-door-support-break**: `ProtectionBreakListener` now also checks the
+  block directly above the one being broken; if it's a door's BOTTOM half
+  (`org.bukkit.block.data.type.Door`, `Bisected.Half.BOTTOM`) and the breaker
+  cannot access it, the break is cancelled — otherwise breaking the block a
+  protected door rests on would pop the door off for free, bypassing its own
+  protection entirely. Reuses `ProtectionService.canAccess` (already
+  fail-closed from T7), so no new exception handling was needed here.
+- **Orphan cleanup**: new `ProtectionPhysicsCleanupListener` listens for
+  Paper's `com.destroystokyo.paper.event.block.BlockDestroyEvent` (found via
+  `javap` on the resolved 26.2 jar — it is the event Paper fires for a block
+  destroyed by physics/natural causes rather than a player) and, when the
+  destroyed block is a door, force-removes both halves' protection data. It
+  does not cancel: there is no player to check access against, so fighting
+  physics here would be meaningless; the goal is only to stop stale data
+  from lingering once the physical door is already gone.
+- **R1-wither-block-destruction**: `ProtectionExplosionListener` gained an
+  `EntityChangeBlockEvent` handler that cancels the event outright when
+  `event.getBlock()` is protected — covers a wither/ravager breaking blocks,
+  an enderman picking one up, a zombie breaking a door in hard mode, etc.
+  (verified the event exists and carries `getBlock()`/`isCancelled` via
+  `javap`; class Javadoc updated to describe both explosion and direct
+  entity destruction).
+
+No new unit tests: all three touch points need a live `Block`/`Player`/event
+instance (Door blockdata, `BlockDestroyEvent`, `EntityChangeBlockEvent`), so
+per the established "Paper adapters without a test harness" rule they are
+verified with `./gradlew build` only; the 50 existing tests stayed green.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures.
+`./gradlew build` → BUILD SUCCESSFUL.
+
 ## Next step
-T8 (destruction bypasses), T9 (double-chest command mirroring), T10 (hopper
-rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — all authorized,
-not yet implemented as of this entry.
+T9 (double-chest command mirroring + chest-join-fallback re-check), T10
+(hopper rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — all
+authorized, not yet implemented as of this entry.
