@@ -21,6 +21,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 /**
  * Auto-protects a just-placed block when its material is protectable (always
@@ -30,6 +31,8 @@ import java.util.UUID;
  * (protects both the top and bottom half together).
  */
 public final class ProtectionPlaceListener implements Listener {
+
+    private static final Logger LOGGER = Logger.getLogger(ProtectionPlaceListener.class.getName());
 
     private final ProtectionService protectionService;
     private final ProtectableTypePolicy classifier;
@@ -83,9 +86,15 @@ public final class ProtectionPlaceListener implements Listener {
 
         Block neighbor = findJoinedNeighbor(block, chestData);
         if (neighbor == null) {
-            // Defensive fallback: blockdata says joined but no matching neighbor was found.
-            protectionService.protect(position, owner);
-            event.getPlayer().sendMessage(messages.protectedPlace());
+            // chestData.getType() says this placement joined something, but the
+            // deterministic partner position (see findJoinedNeighbor) does not
+            // hold a matching chest. This should not happen; fail closed rather
+            // than silently protecting it as an unverified, possibly-joined
+            // single chest (that was the previous, fail-open fallback).
+            LOGGER.severe("Chest at " + position + " reports being joined (" + chestData.getType()
+                    + ") but its deterministic partner position does not hold a matching chest; denying the placement.");
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(messages.storageError());
             return;
         }
 
@@ -106,32 +115,53 @@ public final class ProtectionPlaceListener implements Listener {
     }
 
     /**
-     * Finds the joined neighbor via the two directions perpendicular to our
-     * facing (the only axis chests join on), never via the neighbor's own
-     * {@code Chest.Type} (may still read {@code SINGLE}: a deferred update).
+     * Finds the joined neighbor via the exact, deterministic partner direction
+     * for our own facing and {@code Chest.Type} (LEFT/RIGHT) — never by
+     * scanning and trusting the neighbor's own {@code Chest.Type}, which may
+     * still read {@code SINGLE} here (that shape update can be deferred past
+     * this event).
+     *
+     * <p>Vanilla connects a chest to the neighbor reached by rotating its own
+     * facing clockwise for a RIGHT half, or counter-clockwise for a LEFT half
+     * (clockwise cycle, viewed from above: NORTH -&gt; EAST -&gt; SOUTH -&gt; WEST
+     * -&gt; NORTH).
      */
     private Block findJoinedNeighbor(Block block, Chest chestData) {
-        for (BlockFace face : perpendicularFaces(chestData.getFacing())) {
-            Block candidate = block.getRelative(face);
-            if (candidate.getType() != block.getType()) {
-                continue;
-            }
-            if (!(candidate.getBlockData() instanceof Chest candidateData)) {
-                continue;
-            }
-            if (candidateData.getFacing() != chestData.getFacing()) {
-                continue;
-            }
-            return candidate;
+        BlockFace direction = connectedDirection(chestData.getFacing(), chestData.getType());
+        Block candidate = block.getRelative(direction);
+        if (candidate.getType() != block.getType()) {
+            return null;
         }
-        return null;
+        if (!(candidate.getBlockData() instanceof Chest candidateData)) {
+            return null;
+        }
+        if (candidateData.getFacing() != chestData.getFacing()) {
+            return null;
+        }
+        return candidate;
     }
 
-    private BlockFace[] perpendicularFaces(BlockFace facing) {
+    private BlockFace connectedDirection(BlockFace facing, Chest.Type type) {
+        return type == Chest.Type.LEFT ? counterClockwise(facing) : clockwise(facing);
+    }
+
+    private BlockFace clockwise(BlockFace facing) {
         return switch (facing) {
-            case NORTH, SOUTH -> new BlockFace[] {BlockFace.EAST, BlockFace.WEST};
-            case EAST, WEST -> new BlockFace[] {BlockFace.NORTH, BlockFace.SOUTH};
-            default -> new BlockFace[0];
+            case NORTH -> BlockFace.EAST;
+            case EAST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.WEST;
+            case WEST -> BlockFace.NORTH;
+            default -> facing;
+        };
+    }
+
+    private BlockFace counterClockwise(BlockFace facing) {
+        return switch (facing) {
+            case NORTH -> BlockFace.WEST;
+            case WEST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.EAST;
+            case EAST -> BlockFace.NORTH;
+            default -> facing;
         };
     }
 }

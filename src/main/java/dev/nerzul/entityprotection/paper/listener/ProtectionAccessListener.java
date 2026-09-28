@@ -4,11 +4,9 @@ import dev.nerzul.entityprotection.domain.model.BlockPosition;
 import dev.nerzul.entityprotection.domain.service.ProtectionService;
 import dev.nerzul.entityprotection.paper.config.Messages;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
+import dev.nerzul.entityprotection.paper.util.DoubleChestHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
-import org.bukkit.block.Container;
-import org.bukkit.block.DoubleChest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -16,7 +14,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.InventoryHolder;
 
 import java.util.List;
 
@@ -51,7 +48,7 @@ public final class ProtectionAccessListener implements Listener {
         Player player = event.getPlayer();
         boolean adminBypass = player.hasPermission(ADMIN_PERMISSION);
 
-        for (Block half : doubleChestHalves(block)) {
+        for (Block half : blockAndDoubleChestPartner(block)) {
             BlockPosition position = BlockPositions.of(half);
             if (!protectionService.canAccess(position, player.getUniqueId(), adminBypass)) {
                 deny(event, player, position);
@@ -61,20 +58,12 @@ public final class ProtectionAccessListener implements Listener {
     }
 
     /**
-     * @return both halves of {@code block}'s double chest if it is joined, or just {@code block} otherwise.
+     * @return {@code block}'s double chest partner alongside it if it is
+     * joined, or just {@code block} otherwise.
      */
-    private List<Block> doubleChestHalves(Block block) {
-        if (!(block.getState() instanceof Container container)
-                || !(container.getInventory().getHolder() instanceof DoubleChest doubleChest)) {
-            return List.of(block);
-        }
-        Block left = blockOf(doubleChest.getLeftSide());
-        Block right = blockOf(doubleChest.getRightSide());
-        return left == null || right == null ? List.of(block) : List.of(left, right);
-    }
-
-    private Block blockOf(InventoryHolder holder) {
-        return holder instanceof BlockState state ? state.getBlock() : null;
+    private List<Block> blockAndDoubleChestPartner(Block block) {
+        Block otherHalf = DoubleChestHalves.otherHalfOrNull(block);
+        return otherHalf == null ? List.of(block) : List.of(block, otherHalf);
     }
 
     private void deny(PlayerInteractEvent event, Player player, BlockPosition position) {

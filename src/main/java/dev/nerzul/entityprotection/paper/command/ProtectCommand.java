@@ -10,6 +10,7 @@ import dev.nerzul.entityprotection.paper.config.ProtectionConfig;
 import dev.nerzul.entityprotection.paper.listener.ProtectionAccessListener;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
 import dev.nerzul.entityprotection.paper.util.DoorHalves;
+import dev.nerzul.entityprotection.paper.util.DoubleChestHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.ChatColor;
 import org.bukkit.block.Block;
@@ -107,7 +108,7 @@ public final class ProtectCommand implements CommandExecutor {
                 BlockPositions.of(block), player.getUniqueId(), adminBypass);
 
         if (result == ModificationResult.SUCCESS) {
-            Block otherHalf = DoorHalves.otherHalfOrNull(block);
+            Block otherHalf = otherHalfOrNull(block);
             if (otherHalf != null && otherHalf.getType() == block.getType()) {
                 protectionService.find(BlockPositions.of(otherHalf))
                         .filter(protection.get()::sharesOwnerWith)
@@ -132,7 +133,7 @@ public final class ProtectCommand implements CommandExecutor {
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
         ModificationResult result = protectionService.trust(
                 BlockPositions.of(block), player.getUniqueId(), target, adminBypass);
-        applyToOtherHalfIfDoor(block, otherHalf ->
+        applyToOtherHalf(block, otherHalf ->
                 protectionService.trust(BlockPositions.of(otherHalf), player.getUniqueId(), target, adminBypass), result);
         respond(player, result, messages.trustSingleAdded(args[1]));
     }
@@ -152,7 +153,7 @@ public final class ProtectCommand implements CommandExecutor {
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
         ModificationResult result = protectionService.untrust(
                 BlockPositions.of(block), player.getUniqueId(), target, adminBypass);
-        applyToOtherHalfIfDoor(block, otherHalf ->
+        applyToOtherHalf(block, otherHalf ->
                 protectionService.untrust(BlockPositions.of(otherHalf), player.getUniqueId(), target, adminBypass), result);
         respond(player, result, messages.trustSingleRemoved(args[1]));
     }
@@ -175,14 +176,24 @@ public final class ProtectCommand implements CommandExecutor {
         respond(player, result, messages.trustAllRemoved(args[1]));
     }
 
-    private void applyToOtherHalfIfDoor(Block block, java.util.function.Consumer<Block> action, ModificationResult primaryResult) {
+    private void applyToOtherHalf(Block block, java.util.function.Consumer<Block> action, ModificationResult primaryResult) {
         if (primaryResult != ModificationResult.SUCCESS) {
             return;
         }
-        Block otherHalf = DoorHalves.otherHalfOrNull(block);
+        Block otherHalf = otherHalfOrNull(block);
         if (otherHalf != null) {
             action.accept(otherHalf);
         }
+    }
+
+    /**
+     * @return the other half of {@code block}'s protection unit — the other
+     * door half, or the other half of a joined double chest — or {@code null}
+     * if {@code block} is neither.
+     */
+    private Block otherHalfOrNull(Block block) {
+        Block doorHalf = DoorHalves.otherHalfOrNull(block);
+        return doorHalf != null ? doorHalf : DoubleChestHalves.otherHalfOrNull(block);
     }
 
     private void respond(Player player, ModificationResult result, String successMessage) {

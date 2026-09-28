@@ -46,7 +46,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T6 README with build/install/test instructions; final `gradle build`. Route: delegated.
 - [x] T7 fix(persistence): robustness (R3-corrupt-data-fail-open, R4-fail-open-on-corrupt-data, R4-global-trust-file-wipe, R4-hopper-hot-path-decode). Codec resilience to malformed/truncated lines and separator-bearing world names; fail-closed on unexpected lookup errors; atomic YAML save with backup-and-refuse on corruption and rollback on failed save; per-chunk decode cache invalidated on write/unload. Route: delegated (writer trigger).
 - [x] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
-- [ ] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
+- [x] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
 - [ ] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
 - [ ] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 
@@ -283,7 +283,46 @@ verified with `./gradlew build` only; the 50 existing tests stayed green.
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures.
 `./gradlew build` → BUILD SUCCESSFUL.
 
+### T9 fix(commands): double-chest half divergence
+
+- **R3-double-chest-half-divergence**: new `DoubleChestHalves.otherHalfOrNull`
+  (extracted from `ProtectionAccessListener`'s existing double-chest logic,
+  which now reuses it too instead of duplicating it) resolves a chest's
+  double-chest partner via `Container`/`DoubleChest.getLeftSide/RightSide`.
+  `ProtectCommand` gained a unified `otherHalfOrNull(Block)` (door half, else
+  double-chest half) used by `handleTrust`/`handleUntrust` (mirrors through
+  the normal, permission-checked `protectionService.trust/untrust` — safe by
+  construction, same as the existing door path) and `handleRemove` (mirrors
+  through `forceRemoveProtection`, guarded by the same "same material + same
+  owner" check already used for doors, via `Protection.sharesOwnerWith`).
+  Before this, running `/protect trust` on only one half of a double chest
+  left the other half's trust list diverged, even though both halves share
+  one combined inventory.
+- **R1-chest-join-fallback-fail-open re-check (against `d85fa43` and later)**:
+  confirmed the bug. `findJoinedNeighbor` scanned the two directions
+  perpendicular to facing and used whichever one happened to hold a matching
+  chest — not deterministic, and its "no match found" branch still fell back
+  to *protecting the block as an unverified single chest and allowing the
+  placement*, i.e. fail-open exactly like the original R1. Fixed by making
+  the partner position exact: vanilla connects a chest to the neighbor
+  reached by rotating its own facing clockwise for a RIGHT half or
+  counter-clockwise for a LEFT half (clockwise cycle NORTH→EAST→SOUTH→WEST→
+  NORTH) — verified against an independent, citable description of Java
+  Edition's double-chest left/right layout (Minecraft Wiki-sourced summary;
+  paper-api itself exposes no rotation helper on `BlockFace`, confirmed via
+  `javap`) rather than assumed from memory. `findJoinedNeighbor` now computes
+  that one direction directly; the "no match" branch now cancels the
+  placement and logs a severe warning instead of silently allowing it, since
+  `Chest.Type` reporting a join with no matching partner should not happen
+  and must fail closed.
+
+No new unit tests: both changes are Block/Chest-blockdata-shaped Paper logic
+needing a live server; verified with `./gradlew build` (50 existing tests
+stayed green).
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures.
+`./gradlew build` → BUILD SUCCESSFUL.
+
 ## Next step
-T9 (double-chest command mirroring + chest-join-fallback re-check), T10
-(hopper rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — all
+T10 (hopper rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — both
 authorized, not yet implemented as of this entry.
