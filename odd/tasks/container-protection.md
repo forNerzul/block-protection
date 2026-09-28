@@ -387,3 +387,10 @@ vs. vanilla `ChestBlock#getConnectedDirection`) in new, TDD-tested
 All authorized work (T7-T11) is implemented. Feature complete pending the
 user's manual in-game verification (README checklist) after deploying the
 built jar.
+
+### Review outcome (T7–T11 + a934516)
+
+- Review lineage `review-44cd79cb66f96489` (base `d85fa43`) found R3-chest-partner-direction-inverted; fixed in `a934516`. The correction exceeded its declared budget (100 vs 80 lines), which produced `scope_changed`. With user authorization, the lineage was abandoned (`operator_disposition`).
+- A fresh review of `d85fa43..a934516` (reliability lens) came back **approved**; the acknowledgement was made and the authority burned. The reviewed boundary is now `a934516`.
+- Open advisories (WARNING, non-blocking): R3-codec-skip-erases-and-fails-open, R3-physics-cleanup-before-final-outcome, R3-posix-permission-test-nondeterministic, R3-service-fail-closed-untested.
+- Pending: manual in-game verification by the user (README checklist).
