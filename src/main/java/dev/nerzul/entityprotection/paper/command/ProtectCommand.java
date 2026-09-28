@@ -1,9 +1,12 @@
 package dev.nerzul.entityprotection.paper.command;
 
 import dev.nerzul.entityprotection.domain.model.Protection;
+import dev.nerzul.entityprotection.domain.policy.AutoProtectPolicy;
+import dev.nerzul.entityprotection.domain.policy.ProtectableTypePolicy;
 import dev.nerzul.entityprotection.domain.service.ModificationResult;
 import dev.nerzul.entityprotection.domain.service.ProtectionService;
 import dev.nerzul.entityprotection.paper.config.Messages;
+import dev.nerzul.entityprotection.paper.config.ProtectionConfig;
 import dev.nerzul.entityprotection.paper.listener.ProtectionAccessListener;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
 import dev.nerzul.entityprotection.paper.util.DoorHalves;
@@ -31,10 +34,15 @@ public final class ProtectCommand implements CommandExecutor {
             + "Usage: /protect <trust|untrust|trustall|untrustall> <player> | /protect <info|remove>";
 
     private final ProtectionService protectionService;
+    private final ProtectableTypePolicy classifier;
+    private final ProtectionConfig config;
     private final Messages messages;
 
-    public ProtectCommand(ProtectionService protectionService, Messages messages) {
+    public ProtectCommand(ProtectionService protectionService, ProtectableTypePolicy classifier,
+                           ProtectionConfig config, Messages messages) {
         this.protectionService = protectionService;
+        this.classifier = classifier;
+        this.config = config;
         this.messages = messages;
     }
 
@@ -66,9 +74,8 @@ public final class ProtectCommand implements CommandExecutor {
         if (block == null) {
             return;
         }
-        Optional<Protection> protection = protectionService.find(BlockPositions.of(block));
+        Optional<Protection> protection = findOrExplain(player, block);
         if (protection.isEmpty()) {
-            player.sendMessage(messages.notProtected());
             return;
         }
         Protection value = protection.get();
@@ -80,6 +87,9 @@ public final class ProtectCommand implements CommandExecutor {
     private void handleRemove(Player player) {
         Block block = requireTarget(player);
         if (block == null) {
+            return;
+        }
+        if (findOrExplain(player, block).isEmpty()) {
             return;
         }
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
@@ -104,6 +114,9 @@ public final class ProtectCommand implements CommandExecutor {
         if (block == null) {
             return;
         }
+        if (findOrExplain(player, block).isEmpty()) {
+            return;
+        }
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
         ModificationResult result = protectionService.trust(
                 BlockPositions.of(block), player.getUniqueId(), target, adminBypass);
@@ -119,6 +132,9 @@ public final class ProtectCommand implements CommandExecutor {
         }
         Block block = requireTarget(player);
         if (block == null) {
+            return;
+        }
+        if (findOrExplain(player, block).isEmpty()) {
             return;
         }
         boolean adminBypass = player.hasPermission(ProtectionAccessListener.ADMIN_PERMISSION);
@@ -163,6 +179,29 @@ public final class ProtectCommand implements CommandExecutor {
             case NOT_PROTECTED -> player.sendMessage(messages.notProtected());
             case FORBIDDEN -> player.sendMessage(messages.notOwner());
         }
+    }
+
+    /**
+     * Looks up the protection at {@code block}, or explains why there is none:
+     * "not protectable" for a material this plugin never protects (or doors
+     * while {@code protect-doors} is off), "not protected" otherwise.
+     */
+    private Optional<Protection> findOrExplain(Player player, Block block) {
+        Optional<Protection> protection = protectionService.find(BlockPositions.of(block));
+        if (protection.isPresent()) {
+            return protection;
+        }
+        if (isCurrentlyProtectable(block)) {
+            player.sendMessage(messages.notProtected());
+        } else {
+            player.sendMessage(messages.notProtectable());
+        }
+        return Optional.empty();
+    }
+
+    private boolean isCurrentlyProtectable(Block block) {
+        var category = classifier.classify(block.getType().name());
+        return AutoProtectPolicy.isAutoProtectable(category, config.protectDoors());
     }
 
     private Block requireTarget(Player player) {

@@ -47,18 +47,18 @@ public final class EntityProtectionPlugin extends JavaPlugin {
         Messages messages = new Messages(getConfig());
 
         registerListeners(classifier, config, messages);
-        registerCommand(messages);
+        registerCommand(classifier, config, messages);
 
         getLogger().info("EntityProtection enabled.");
     }
 
-    private void registerCommand(Messages messages) {
+    private void registerCommand(ProtectableTypePolicy classifier, ProtectionConfig config, Messages messages) {
         var protectCommand = getCommand("protect");
         if (protectCommand == null) {
             getLogger().severe("Command 'protect' is missing from plugin.yml; /protect will not work.");
             return;
         }
-        protectCommand.setExecutor(new ProtectCommand(protectionService, messages));
+        protectCommand.setExecutor(new ProtectCommand(protectionService, classifier, config, messages));
         protectCommand.setTabCompleter(new ProtectTabCompleter());
     }
 
