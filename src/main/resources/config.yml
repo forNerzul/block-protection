@@ -20,3 +20,4 @@ messages:
   no-target-block: "&cYou must be looking at a block within 5 blocks."
   not-protectable: "&cThat block cannot be protected."
   player-not-found: "&cPlayer not found. They must be online, or have played on this server before."
+  storage-error: "&cSomething went wrong saving that change. Please try again or tell an admin."

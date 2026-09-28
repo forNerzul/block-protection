@@ -11,7 +11,15 @@ public interface GlobalTrustRepository {
 
     Set<UUID> trustedBy(UUID owner);
 
-    void trust(UUID owner, UUID trustedPlayer);
+    /**
+     * @return {@code true} if the change was persisted, {@code false} if persistence
+     * failed and the change was rolled back (nothing changed on disk or in memory).
+     */
+    boolean trust(UUID owner, UUID trustedPlayer);
 
-    void untrust(UUID owner, UUID trustedPlayer);
+    /**
+     * @return {@code true} if the change was persisted, {@code false} if persistence
+     * failed and the change was rolled back (nothing changed on disk or in memory).
+     */
+    boolean untrust(UUID owner, UUID trustedPlayer);
 }

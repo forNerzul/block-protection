@@ -82,6 +82,10 @@ public final class Messages {
         return format("player-not-found");
     }
 
+    public String storageError() {
+        return format("storage-error");
+    }
+
     private String format(String key) {
         String raw = configuration.getString("messages." + key, "");
         return ChatColor.translateAlternateColorCodes('&', raw);

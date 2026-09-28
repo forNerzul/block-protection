@@ -5,10 +5,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YamlGlobalTrustRepositoryTest {
@@ -74,5 +81,63 @@ class YamlGlobalTrustRepositoryTest {
         repository.untrust(owner, trusted);
 
         assertTrue(repository.trustedBy(owner).isEmpty());
+    }
+
+    @Test
+    void trustReturnsTrueOnSuccessfulPersist() {
+        YamlGlobalTrustRepository repository = new YamlGlobalTrustRepository(storageFile());
+
+        assertTrue(repository.trust(owner, trusted));
+    }
+
+    @Test
+    void invalidUuidEntriesAreSkippedWithoutThrowing() throws IOException {
+        File file = storageFile();
+        String yaml = "owners:\n  " + owner + ":\n  - not-a-uuid\n  - " + trusted + "\n";
+        Files.writeString(file.toPath(), yaml, StandardCharsets.UTF_8);
+
+        YamlGlobalTrustRepository repository = new YamlGlobalTrustRepository(file);
+
+        Set<UUID> result = repository.trustedBy(owner);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(trusted));
+    }
+
+    @Test
+    void aCorruptFileIsBackedUpAndNeverOverwritten() throws IOException {
+        File file = storageFile();
+        Files.writeString(file.toPath(), "owners: [unterminated flow sequence\n", StandardCharsets.UTF_8);
+        long originalLength = file.length();
+
+        YamlGlobalTrustRepository repository = new YamlGlobalTrustRepository(file);
+        boolean result = repository.trust(owner, trusted);
+
+        assertFalse(result);
+        assertEquals(originalLength, file.length());
+        File[] backups = dataFolder.listFiles((dir, name) -> name.startsWith("global-trust.yml.corrupt"));
+        assertNotNull(backups);
+        assertEquals(1, backups.length);
+    }
+
+    @Test
+    void aFailedSaveRollsBackTheInMemoryChangeAndReportsFailure() throws IOException {
+        File file = storageFile();
+        YamlGlobalTrustRepository repository = new YamlGlobalTrustRepository(file);
+        assertTrue(repository.trust(owner, trusted));
+
+        File parent = file.getParentFile();
+        Set<PosixFilePermission> original = Files.getPosixFilePermissions(parent.toPath());
+        try {
+            Files.setPosixFilePermissions(parent.toPath(), PosixFilePermissions.fromString("r-xr-xr-x"));
+
+            UUID secondTrusted = UUID.randomUUID();
+            boolean result = repository.trust(owner, secondTrusted);
+
+            assertFalse(result);
+            assertFalse(repository.trustedBy(owner).contains(secondTrusted));
+            assertTrue(repository.trustedBy(owner).contains(trusted));
+        } finally {
+            Files.setPosixFilePermissions(parent.toPath(), original);
+        }
     }
 }

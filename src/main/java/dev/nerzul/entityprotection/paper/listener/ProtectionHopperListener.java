@@ -11,6 +11,8 @@ import org.bukkit.inventory.Inventory;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Bypass prevention for hoppers and hopper minecarts.
@@ -25,6 +27,8 @@ import java.util.UUID;
  */
 public final class ProtectionHopperListener implements Listener {
 
+    private static final Logger LOGGER = Logger.getLogger(ProtectionHopperListener.class.getName());
+
     private final ProtectionService protectionService;
 
     public ProtectionHopperListener(ProtectionService protectionService) {
@@ -33,17 +37,23 @@ public final class ProtectionHopperListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMoveItem(InventoryMoveItemEvent event) {
-        Optional<UUID> sourceOwner = ownerOf(event.getSource());
-        if (sourceOwner.isEmpty()) {
-            return;
-        }
+        try {
+            Optional<UUID> sourceOwner = ownerOf(event.getSource());
+            if (sourceOwner.isEmpty()) {
+                return;
+            }
 
-        Optional<UUID> destinationOwner = ownerOf(event.getDestination());
-        if (destinationOwner.isPresent() && destinationOwner.get().equals(sourceOwner.get())) {
-            return;
-        }
+            Optional<UUID> destinationOwner = ownerOf(event.getDestination());
+            if (destinationOwner.isPresent() && destinationOwner.get().equals(sourceOwner.get())) {
+                return;
+            }
 
-        event.setCancelled(true);
+            event.setCancelled(true);
+        } catch (RuntimeException e) {
+            // Fail closed: an unreadable lookup must not look like "nothing protected here".
+            LOGGER.log(Level.SEVERE, "Protection lookup failed while checking a hopper move; cancelling (fail closed)", e);
+            event.setCancelled(true);
+        }
     }
 
     private Optional<UUID> ownerOf(Inventory inventory) {

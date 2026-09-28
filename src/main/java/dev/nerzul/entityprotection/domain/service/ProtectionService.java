@@ -10,6 +10,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Application service orchestrating protection use cases against the two ports.
@@ -17,6 +20,8 @@ import java.util.UUID;
  * every adapter (commands, listeners) shares the same behavior.
  */
 public final class ProtectionService {
+
+    private static final Logger LOGGER = Logger.getLogger(ProtectionService.class.getName());
 
     private final ProtectionRepository protectionRepository;
     private final GlobalTrustRepository globalTrustRepository;
@@ -46,17 +51,39 @@ public final class ProtectionService {
         return protectionRepository.find(position);
     }
 
+    /**
+     * Fails closed: if the lookup throws unexpectedly (e.g. corrupt storage),
+     * this returns {@code true} — "assume protected" is the safe default for
+     * callers deciding whether to preserve a block from destruction.
+     */
     public boolean isProtected(BlockPosition position) {
-        return protectionRepository.find(position).isPresent();
+        return safely(() -> protectionRepository.find(position).isPresent(), true, "isProtected(" + position + ")");
     }
 
+    /**
+     * Fails closed: if the lookup throws unexpectedly, this returns {@code false}
+     * — "deny access" is the safe default regardless of which action (open, use,
+     * break) the caller is gating.
+     */
     public boolean canAccess(BlockPosition position, UUID requester, boolean adminBypass) {
-        Optional<Protection> protection = protectionRepository.find(position);
-        if (protection.isEmpty()) {
-            return true;
+        return safely(() -> {
+            Optional<Protection> protection = protectionRepository.find(position);
+            if (protection.isEmpty()) {
+                return true;
+            }
+            Set<UUID> globallyTrusted = globalTrustRepository.trustedBy(protection.get().owner());
+            return AccessPolicy.canAccess(requester, protection.get(), globallyTrusted, adminBypass);
+        }, false, "canAccess(" + position + ", " + requester + ")");
+    }
+
+    private <T> T safely(Supplier<T> action, T safeFallback, String description) {
+        try {
+            return action.get();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.SEVERE, "Protection lookup failed for " + description
+                    + "; failing closed with " + safeFallback, e);
+            return safeFallback;
         }
-        Set<UUID> globallyTrusted = globalTrustRepository.trustedBy(protection.get().owner());
-        return AccessPolicy.canAccess(requester, protection.get(), globallyTrusted, adminBypass);
     }
 
     public ModificationResult trust(BlockPosition position, UUID requester, UUID target, boolean adminBypass) {
@@ -106,13 +133,11 @@ public final class ProtectionService {
     }
 
     public ModificationResult trustAll(UUID owner, UUID target) {
-        globalTrustRepository.trust(owner, target);
-        return ModificationResult.SUCCESS;
+        return globalTrustRepository.trust(owner, target) ? ModificationResult.SUCCESS : ModificationResult.STORAGE_ERROR;
     }
 
     public ModificationResult untrustAll(UUID owner, UUID target) {
-        globalTrustRepository.untrust(owner, target);
-        return ModificationResult.SUCCESS;
+        return globalTrustRepository.untrust(owner, target) ? ModificationResult.SUCCESS : ModificationResult.STORAGE_ERROR;
     }
 
     private boolean canModify(Protection protection, UUID requester, boolean adminBypass) {

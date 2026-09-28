@@ -14,6 +14,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static dev.nerzul.entityprotection.paper.listener.ProtectionAccessListener.ADMIN_PERMISSION;
 
@@ -22,6 +24,8 @@ import static dev.nerzul.entityprotection.paper.listener.ProtectionAccessListene
  * protection data (both halves, for a door) once an authorized break goes through.
  */
 public final class ProtectionBreakListener implements Listener {
+
+    private static final Logger LOGGER = Logger.getLogger(ProtectionBreakListener.class.getName());
 
     private final ProtectionService protectionService;
     private final Messages messages;
@@ -35,7 +39,16 @@ public final class ProtectionBreakListener implements Listener {
     public void onBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
         BlockPosition position = BlockPositions.of(block);
-        Optional<Protection> protection = protectionService.find(position);
+
+        Optional<Protection> protection;
+        try {
+            protection = protectionService.find(position);
+        } catch (RuntimeException e) {
+            // Fail closed: an unreadable lookup must not look like "unprotected".
+            LOGGER.log(Level.SEVERE, "Protection lookup failed for " + position + "; denying the break (fail closed)", e);
+            event.setCancelled(true);
+            return;
+        }
         if (protection.isEmpty()) {
             return;
         }

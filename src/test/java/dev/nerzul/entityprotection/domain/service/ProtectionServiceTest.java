@@ -171,16 +171,18 @@ class ProtectionServiceTest {
         }
 
         @Override
-        public void trust(UUID owner, UUID trustedPlayer) {
+        public boolean trust(UUID owner, UUID trustedPlayer) {
             store.computeIfAbsent(owner, k -> new HashSet<>()).add(trustedPlayer);
+            return true;
         }
 
         @Override
-        public void untrust(UUID owner, UUID trustedPlayer) {
+        public boolean untrust(UUID owner, UUID trustedPlayer) {
             Set<UUID> existing = store.get(owner);
             if (existing != null) {
                 existing.remove(trustedPlayer);
             }
+            return true;
         }
     }
 }

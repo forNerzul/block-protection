@@ -44,6 +44,11 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T4 Listeners: place, interact, break, double chest, hoppers, explosions, pistons, burn. Route: delegated.
 - [x] T5 Commands + permissions + messages. Route: delegated.
 - [x] T6 README with build/install/test instructions; final `gradle build`. Route: delegated.
+- [x] T7 fix(persistence): robustness (R3-corrupt-data-fail-open, R4-fail-open-on-corrupt-data, R4-global-trust-file-wipe, R4-hopper-hot-path-decode). Codec resilience to malformed/truncated lines and separator-bearing world names; fail-closed on unexpected lookup errors; atomic YAML save with backup-and-refuse on corruption and rollback on failed save; per-chunk decode cache invalidated on write/unload. Route: delegated (writer trigger).
+- [ ] T8 fix(listeners): destruction bypasses (R1-door-support-break, R1-wither-block-destruction). Deny breaking a block that supports an inaccessible protected door; clean up orphaned door protection data when physics destroys a door; cancel `EntityChangeBlockEvent` against a protected block. Route: delegated.
+- [ ] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
+- [ ] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
+- [ ] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 
 ## Acceptance criteria
 - A non-owner cannot open, break, or hopper-drain a protected chest.
@@ -191,6 +196,61 @@ Checks: `./gradlew test` → BUILD SUCCESSFUL, 43 tests, 0 failures.
 `./gradlew build` → BUILD SUCCESSFUL. `git show --stat HEAD` on the correction
 commit: 7 files changed, 89 insertions(+), 30 deletions(-).
 
+### T7 fix(persistence): robustness
+
+Non-blocking WARNING advisories from the same native review, authorized by the
+user. Route: delegated (writer trigger, 15 files).
+
+- **Codec resilience**: `ChunkProtectionCodec` now length-prefixes the world
+  name (`<charCount>:<world>|x|y|...`) so it round-trips even if the world
+  name contains the field separator, and decodes each line independently
+  inside a try/catch, logging and skipping a malformed/truncated line instead
+  of losing every protection in the chunk. Not backward compatible with the
+  old unprefixed format — documented in the class Javadoc why that's fine:
+  this plugin has never shipped a release, so no server has ever persisted
+  data in the old format. TDD: added 3 tests (malformed line skipped without
+  losing the others, truncated world-length prefix skipped, world name
+  containing `|` round-trips) → RED (`ArrayIndexOutOfBoundsException`/
+  `NumberFormatException`/assertion failure) → GREEN.
+- **Fail closed**: `ProtectionService.canAccess`/`isProtected` now catch any
+  `RuntimeException` from the repositories and return the safe default for
+  their own semantics — `false` (deny) for `canAccess`, `true` (assume
+  protected) for `isProtected`, since the same "empty on error" answer would
+  be fail-open for one caller and fail-closed for the other. The remaining
+  direct `find()` call sites that gate a security decision
+  (`ProtectionBreakListener`, `ProtectionHopperListener`) now wrap that call
+  and cancel the event on error instead of letting the exception silently
+  leave the event un-cancelled (allowed). `ProtectCommand#onCommand` now
+  wraps its whole dispatch and reports a new `storage-error` message instead
+  of crashing silently.
+- **YamlGlobalTrustRepository**: invalid UUID entries are skipped with a
+  warning (`parseUuids`); a file that fails to parse is detected ourselves
+  (read + `loadFromString`, not the lenient `loadConfiguration(File)` which
+  swallows parse errors) and is never overwritten — a timestamped `.corrupt-*`
+  backup is written next to it and every `trust`/`untrust` call returns
+  `false` until it's fixed; saves are atomic (temp file in the same
+  directory + `ATOMIC_MOVE`); a failed save rolls the in-memory change back
+  to its previous value. `GlobalTrustRepository.trust/untrust` now return
+  `boolean`; `ModificationResult` gained `STORAGE_ERROR`, wired through
+  `ProtectCommand`'s `trustAll`/`untrustAll` and the shared `respond()`. TDD:
+  added 4 tests (invalid UUID skipped, corrupt file backed up and never
+  overwritten, failed save rolls back and reports failure, trust returns
+  true) → RED (compile errors: `trust`/`untrust` still returned `void`) →
+  GREEN.
+- **Hot path**: `ChunkProtectionRepository` now caches each chunk's decoded
+  `Map<BlockPosition, Protection>` keyed by `(world, chunkX, chunkZ)`; a write
+  replaces the cache entry (no re-decode), a `ChunkUnloadEvent` (the
+  repository self-registers as a `Listener`) evicts it, and a chunk with no
+  `protections` PDC key at all is never decoded (an empty map is used
+  directly). No dedicated test: needs a live `Chunk`/`PersistentDataContainer`,
+  same "Paper adapter without a test harness" rule as T3/T4; verified with
+  `./gradlew build`.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 50 tests, 0 failures (7 new: 3 in
+`ChunkProtectionCodecTest`, 4 in `YamlGlobalTrustRepositoryTest`).
+`./gradlew build` → BUILD SUCCESSFUL.
+
 ## Next step
-Feature complete pending the user's manual in-game verification (README
-checklist) after deploying the built jar.
+T8 (destruction bypasses), T9 (double-chest command mirroring), T10 (hopper
+rule redesign), T11 (drop hardcoded `org.gradle.java.home`) — all authorized,
+not yet implemented as of this entry.

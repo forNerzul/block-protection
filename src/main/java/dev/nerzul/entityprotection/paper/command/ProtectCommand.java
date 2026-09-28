@@ -21,6 +21,8 @@ import org.bukkit.entity.Player;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * {@code /protect trust|untrust|trustall|untrustall <player>} and
@@ -29,6 +31,7 @@ import java.util.UUID;
  */
 public final class ProtectCommand implements CommandExecutor {
 
+    private static final Logger LOGGER = Logger.getLogger(ProtectCommand.class.getName());
     private static final int TARGET_RANGE = 5;
     private static final String USAGE = ChatColor.RED
             + "Usage: /protect <trust|untrust|trustall|untrustall> <player> | /protect <info|remove>";
@@ -57,14 +60,20 @@ public final class ProtectCommand implements CommandExecutor {
             return true;
         }
 
-        switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "info" -> handleInfo(player);
-            case "remove" -> handleRemove(player);
-            case "trust" -> handleTrust(player, args);
-            case "untrust" -> handleUntrust(player, args);
-            case "trustall" -> handleTrustAll(player, args);
-            case "untrustall" -> handleUntrustAll(player, args);
-            default -> player.sendMessage(USAGE);
+        try {
+            switch (args[0].toLowerCase(Locale.ROOT)) {
+                case "info" -> handleInfo(player);
+                case "remove" -> handleRemove(player);
+                case "trust" -> handleTrust(player, args);
+                case "untrust" -> handleUntrust(player, args);
+                case "trustall" -> handleTrustAll(player, args);
+                case "untrustall" -> handleUntrustAll(player, args);
+                default -> player.sendMessage(USAGE);
+            }
+        } catch (RuntimeException e) {
+            // Fail closed: an unexpected storage error must never look like success.
+            LOGGER.log(Level.SEVERE, "Unexpected error handling /protect " + String.join(" ", args), e);
+            player.sendMessage(messages.storageError());
         }
         return true;
     }
@@ -153,8 +162,8 @@ public final class ProtectCommand implements CommandExecutor {
         if (target == null) {
             return;
         }
-        protectionService.trustAll(player.getUniqueId(), target);
-        player.sendMessage(messages.trustAllAdded(args[1]));
+        ModificationResult result = protectionService.trustAll(player.getUniqueId(), target);
+        respond(player, result, messages.trustAllAdded(args[1]));
     }
 
     private void handleUntrustAll(Player player, String[] args) {
@@ -162,8 +171,8 @@ public final class ProtectCommand implements CommandExecutor {
         if (target == null) {
             return;
         }
-        protectionService.untrustAll(player.getUniqueId(), target);
-        player.sendMessage(messages.trustAllRemoved(args[1]));
+        ModificationResult result = protectionService.untrustAll(player.getUniqueId(), target);
+        respond(player, result, messages.trustAllRemoved(args[1]));
     }
 
     private void applyToOtherHalfIfDoor(Block block, java.util.function.Consumer<Block> action, ModificationResult primaryResult) {
@@ -181,6 +190,7 @@ public final class ProtectCommand implements CommandExecutor {
             case SUCCESS -> player.sendMessage(successMessage);
             case NOT_PROTECTED -> player.sendMessage(messages.notProtected());
             case FORBIDDEN -> player.sendMessage(messages.notOwner());
+            case STORAGE_ERROR -> player.sendMessage(messages.storageError());
         }
     }
 

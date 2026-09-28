@@ -6,5 +6,7 @@ package dev.nerzul.entityprotection.domain.service;
 public enum ModificationResult {
     SUCCESS,
     NOT_PROTECTED,
-    FORBIDDEN
+    FORBIDDEN,
+    /** The change was authorized but persisting it failed (e.g. storage refused a corrupt-data overwrite). */
+    STORAGE_ERROR
 }
