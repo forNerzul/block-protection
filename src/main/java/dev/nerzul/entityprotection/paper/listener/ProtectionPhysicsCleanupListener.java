@@ -6,6 +6,7 @@ import dev.nerzul.entityprotection.paper.util.BlockPositions;
 import dev.nerzul.entityprotection.paper.util.DoorHalves;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
 /**
@@ -20,6 +21,11 @@ import org.bukkit.event.Listener;
  * both wrong (nothing to authorize against) and version-fragile. The
  * meaningful, safe action is keeping stored protection data from going stale
  * once the physical door is gone.
+ *
+ * <p>Runs at {@link EventPriority#MONITOR}: another plugin may still cancel
+ * this event at a later priority than {@code NORMAL}, and deleting the
+ * protection data before that final outcome is known would erase it for a
+ * door that, after all, survives.
  */
 public final class ProtectionPhysicsCleanupListener implements Listener {
 
@@ -29,7 +35,7 @@ public final class ProtectionPhysicsCleanupListener implements Listener {
         this.protectionService = protectionService;
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onNaturalDestroy(BlockDestroyEvent event) {
         Block block = event.getBlock();
         Block otherHalf = DoorHalves.otherHalfOrNull(block);

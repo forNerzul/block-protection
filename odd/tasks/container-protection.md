@@ -50,7 +50,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
 - [x] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
 - [x] T12 fix(persistence): malformed lines must fail closed and never be erased (R3-codec-skip-erases-and-fails-open). Codec result carries decoded entries + raw undecodable lines (re-embedded verbatim on every write); position-extractable corruption denies non-admins at that position with an unknown owner, chunk-wide corruption denies non-admins on every unrecorded protectable block in that chunk; admin bypass still works. Route: delegated.
-- [ ] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
+- [x] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
 - [ ] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
 - [ ] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
 
@@ -436,4 +436,34 @@ built jar.
 
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures (7 new).
 `./gradlew build` → BUILD SUCCESSFUL.
+
+### T13 fix(listeners): BlockDestroyEvent/break cleanup only on the final outcome
+
+- `ProtectionPhysicsCleanupListener`: moved its single handler (pure cleanup,
+  never cancels) to `@EventHandler(priority = EventPriority.MONITOR,
+  ignoreCancelled = true)` — another plugin can still cancel a
+  `BlockDestroyEvent` at a later priority, and deleting protection data before
+  that final outcome is known would erase it for a door that survives.
+- Audited every other listener for the same pattern by `rg`-searching for
+  `forceRemoveProtection`/`removeProtection` calls: only `ProtectionBreakListener`
+  also had it. `ProtectionExplosionListener`/`ProtectionBurnListener`/
+  `ProtectionPistonListener` only ever cancel or filter a block list — they
+  never delete protection data, so they were not affected and were left alone.
+  `ProtectionPlaceListener` only *creates* data (`protect`/`protectLike`), and
+  T13's scope is explicitly the deletion/cleanup pattern, not placement.
+- `ProtectionBreakListener` split in two: `onBreak` (default priority) keeps
+  the cancel decision (protection/support-door deny checks) exactly as before;
+  a new `onBreakFinal` (`MONITOR`, `ignoreCancelled = true`) re-fetches the
+  protection and does the actual `forceRemoveProtection` (both halves' guard
+  included) only once the break's final, not-cancelled outcome is known. A
+  lookup failure at `MONITOR` logs and skips cleanup instead of trying to
+  cancel (too late for that at `MONITOR`) or guessing.
+
+No new unit tests: verifying event *priority ordering* needs a live
+PluginManager dispatch, so this is a Paper adapter without a test harness,
+verified with `./gradlew build`; 70 existing tests stayed green.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures.
+`./gradlew build` → BUILD SUCCESSFUL.
+
 - Pending: manual in-game verification by the user (README checklist).
