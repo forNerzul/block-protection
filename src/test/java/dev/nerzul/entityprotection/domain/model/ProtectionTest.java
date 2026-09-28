@@ -86,4 +86,13 @@ class ProtectionTest {
         assertFalse(ownedByOwner.sharesOwnerWith(ownedByStranger));
         assertFalse(ownedByOwner.sharesOwnerWith(null));
     }
+
+    @Test
+    void unknownOwnerIsTheNilUuidAndNoRealPlayerOwnsIt() {
+        Protection unknown = Protection.unknownOwner();
+
+        assertTrue(unknown.isOwner(Protection.UNKNOWN_OWNER));
+        assertFalse(unknown.isOwner(owner));
+        assertFalse(unknown.isOwner(UUID.randomUUID()));
+    }
 }

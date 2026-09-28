@@ -4,10 +4,12 @@ import dev.nerzul.entityprotection.domain.model.BlockPosition;
 import dev.nerzul.entityprotection.domain.model.Protection;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkProtectionCodecTest {
@@ -18,9 +20,9 @@ class ChunkProtectionCodecTest {
     }
 
     @Test
-    void decodingAnEmptyStringProducesAnEmptyMap() {
-        assertTrue(ChunkProtectionCodec.decode("").isEmpty());
-        assertTrue(ChunkProtectionCodec.decode(null).isEmpty());
+    void decodingAnEmptyStringProducesAnEmptyResult() {
+        assertTrue(ChunkProtectionCodec.decode("").entries().isEmpty());
+        assertTrue(ChunkProtectionCodec.decode(null).entries().isEmpty());
     }
 
     @Test
@@ -30,7 +32,7 @@ class ChunkProtectionCodecTest {
         Map<BlockPosition, Protection> protections = Map.of(position, new Protection(owner));
 
         String encoded = ChunkProtectionCodec.encode(protections);
-        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded);
+        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded).entries();
 
         assertEquals(1, decoded.size());
         Protection decodedProtection = decoded.get(position);
@@ -56,7 +58,7 @@ class ChunkProtectionCodecTest {
         Map<BlockPosition, Protection> protections = Map.of(posA, protectionA, posB, protectionB);
 
         String encoded = ChunkProtectionCodec.encode(protections);
-        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded);
+        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded).entries();
 
         assertEquals(2, decoded.size());
         assertTrue(decoded.get(posA).isOwner(ownerA));
@@ -73,7 +75,7 @@ class ChunkProtectionCodecTest {
         Map<BlockPosition, Protection> protections = Map.of(position, new Protection(owner));
 
         String encoded = ChunkProtectionCodec.encode(protections);
-        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded);
+        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(encoded).entries();
 
         assertEquals(1, decoded.size());
         assertTrue(decoded.containsKey(position));
@@ -87,7 +89,7 @@ class ChunkProtectionCodecTest {
         String goodLine = ChunkProtectionCodec.encode(Map.of(good, new Protection(owner)));
         String data = goodLine + "\n" + "this is not a valid protection line" + "\n" + goodLine.replace("5|6|7", "8|9|10");
 
-        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(data);
+        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(data).entries();
 
         assertEquals(2, decoded.size());
         assertTrue(decoded.containsKey(good));
@@ -103,9 +105,59 @@ class ChunkProtectionCodecTest {
         String truncated = "999:short|1|2|3|0|0";
         String data = truncated + "\n" + goodLine;
 
-        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(data);
+        Map<BlockPosition, Protection> decoded = ChunkProtectionCodec.decode(data).entries();
 
         assertEquals(1, decoded.size());
         assertTrue(decoded.containsKey(good));
+    }
+
+    @Test
+    void positionExtractableCorruptionIsReportedAsUnknownOwnerNotChunkWide() {
+        // Valid world/x/y/z prefix, corrupt owner field.
+        String badLine = "5:world|5|6|7|NOTANUMBER|0";
+
+        ChunkProtectionCodec.ChunkDecodeResult result = ChunkProtectionCodec.decode(badLine);
+
+        assertTrue(result.entries().isEmpty());
+        assertEquals(1, result.unparseableLines().size());
+        assertTrue(result.unknownOwnerPositions().contains(new BlockPosition("world", 5, 6, 7)));
+        assertFalse(result.chunkWideCorruption());
+    }
+
+    @Test
+    void unrecoverableLineTriggersChunkWideCorruption() {
+        String badLine = "this is not a valid protection line";
+
+        ChunkProtectionCodec.ChunkDecodeResult result = ChunkProtectionCodec.decode(badLine);
+
+        assertTrue(result.entries().isEmpty());
+        assertEquals(1, result.unparseableLines().size());
+        assertTrue(result.unknownOwnerPositions().isEmpty());
+        assertTrue(result.chunkWideCorruption());
+    }
+
+    @Test
+    void preservedRawLinesSurviveAReEncodeThatChangesOtherEntries() {
+        UUID owner = UUID.randomUUID();
+        BlockPosition good = new BlockPosition("world", 1, 1, 1);
+        String badLine = "this is not a valid protection line";
+        String initialData = ChunkProtectionCodec.encode(Map.of(good, new Protection(owner))) + "\n" + badLine;
+
+        ChunkProtectionCodec.ChunkDecodeResult first = ChunkProtectionCodec.decode(initialData);
+        assertEquals(1, first.unparseableLines().size());
+
+        // Simulate saving a brand-new position in the same chunk.
+        Map<BlockPosition, Protection> updatedEntries = new HashMap<>(first.entries());
+        BlockPosition newPosition = new BlockPosition("world", 9, 9, 9);
+        updatedEntries.put(newPosition, new Protection(UUID.randomUUID()));
+
+        String reEncoded = ChunkProtectionCodec.encode(updatedEntries, first.unparseableLines());
+        ChunkProtectionCodec.ChunkDecodeResult second = ChunkProtectionCodec.decode(reEncoded);
+
+        assertEquals(2, second.entries().size());
+        assertTrue(second.entries().containsKey(good));
+        assertTrue(second.entries().containsKey(newPosition));
+        assertEquals(1, second.unparseableLines().size());
+        assertTrue(second.unparseableLines().contains(badLine));
     }
 }

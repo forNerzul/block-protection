@@ -3,8 +3,10 @@ package dev.nerzul.entityprotection.paper.persistence;
 import dev.nerzul.entityprotection.domain.model.BlockPosition;
 import dev.nerzul.entityprotection.domain.model.Protection;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -29,8 +31,13 @@ import java.util.logging.Logger;
  * with it, and there is deliberately no migration path for that reason.
  *
  * <p>Every line is decoded independently: a malformed or truncated line (for
- * example from disk corruption) is logged and skipped rather than discarding
- * every other protection in the same chunk.
+ * example from disk corruption) is logged and never discarded — its raw text
+ * is kept verbatim in {@link ChunkDecodeResult#unparseableLines()} so the
+ * caller can re-embed it on every future write instead of erasing it. If the
+ * line's position (world/x/y/z) can still be read, it is reported in
+ * {@link ChunkDecodeResult#unknownOwnerPositions()}; otherwise
+ * {@link ChunkDecodeResult#chunkWideCorruption()} is set. See
+ * {@link ChunkProtectionRepository} for how callers fail closed on both.
  */
 public final class ChunkProtectionCodec {
 
@@ -47,7 +54,26 @@ public final class ChunkProtectionCodec {
     private ChunkProtectionCodec() {
     }
 
+    /**
+     * The result of decoding a chunk's raw protection blob.
+     *
+     * @param entries                successfully decoded protections
+     * @param unparseableLines       raw lines that could not be decoded, verbatim, to be re-embedded on the next {@link #encode}
+     * @param unknownOwnerPositions  positions recovered from an otherwise-malformed line; callers should deny non-admins there
+     * @param chunkWideCorruption    true if at least one malformed line's position could not be recovered at all
+     */
+    public record ChunkDecodeResult(Map<BlockPosition, Protection> entries, List<String> unparseableLines,
+                                     Set<BlockPosition> unknownOwnerPositions, boolean chunkWideCorruption) {
+    }
+
     public static String encode(Map<BlockPosition, Protection> protections) {
+        return encode(protections, List.of());
+    }
+
+    /**
+     * @param preservedRawLines undecodable lines (from a prior {@link #decode}) to re-embed verbatim, so they are never lost.
+     */
+    public static String encode(Map<BlockPosition, Protection> protections, List<String> preservedRawLines) {
         StringBuilder builder = new StringBuilder();
         boolean first = true;
         for (Map.Entry<BlockPosition, Protection> entry : protections.entrySet()) {
@@ -56,6 +82,13 @@ public final class ChunkProtectionCodec {
             }
             first = false;
             appendLine(builder, entry.getKey(), entry.getValue());
+        }
+        for (String raw : preservedRawLines) {
+            if (!first) {
+                builder.append(LINE_SEPARATOR);
+            }
+            first = false;
+            builder.append(raw);
         }
         return builder.toString();
     }
@@ -80,29 +113,69 @@ public final class ChunkProtectionCodec {
         }
     }
 
-    public static Map<BlockPosition, Protection> decode(String data) {
+    public static ChunkDecodeResult decode(String data) {
         return decode(data, DEFAULT_LOGGER);
     }
 
     /**
-     * @param logger receives one warning per skipped malformed/truncated line.
+     * @param logger receives one warning per malformed/truncated line.
      */
-    public static Map<BlockPosition, Protection> decode(String data, Logger logger) {
-        Map<BlockPosition, Protection> result = new HashMap<>();
-        if (data == null || data.isEmpty()) {
-            return result;
-        }
-        for (String line : data.split(LINE_SEPARATOR)) {
-            if (line.isBlank()) {
-                continue;
+    public static ChunkDecodeResult decode(String data, Logger logger) {
+        Map<BlockPosition, Protection> entries = new HashMap<>();
+        List<String> unparseableLines = new ArrayList<>();
+        Set<BlockPosition> unknownOwnerPositions = new HashSet<>();
+        boolean chunkWideCorruption = false;
+
+        if (data != null && !data.isEmpty()) {
+            for (String line : data.split(LINE_SEPARATOR)) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                try {
+                    decodeLine(line, entries);
+                } catch (RuntimeException e) {
+                    logger.log(Level.WARNING, "Preserving unparseable protection entry (never erased): " + line, e);
+                    unparseableLines.add(line);
+                    BlockPosition position = tryExtractPosition(line);
+                    if (position != null) {
+                        unknownOwnerPositions.add(position);
+                    } else {
+                        chunkWideCorruption = true;
+                    }
+                }
             }
-            try {
-                decodeLine(line, result);
-            } catch (RuntimeException e) {
-                logger.log(Level.WARNING, "Skipping malformed protection entry: " + line, e);
-            }
         }
-        return result;
+        return new ChunkDecodeResult(entries, unparseableLines, unknownOwnerPositions, chunkWideCorruption);
+    }
+
+    /**
+     * Best-effort recovery of just the position (world/x/y/z) from a line that
+     * failed full decoding, e.g. because only the owner/trusted fields are corrupt.
+     */
+    private static BlockPosition tryExtractPosition(String line) {
+        try {
+            int separatorIndex = line.indexOf(WORLD_LENGTH_SEPARATOR);
+            if (separatorIndex < 0) {
+                return null;
+            }
+            int worldLength = Integer.parseInt(line.substring(0, separatorIndex));
+            int worldStart = separatorIndex + 1;
+            int worldEnd = worldStart + worldLength;
+            String world = line.substring(worldStart, worldEnd);
+            if (worldEnd >= line.length() || line.charAt(worldEnd) != FIELD_SEPARATOR_CHAR) {
+                return null;
+            }
+            String[] fields = line.substring(worldEnd + 1).split(FIELD_SEPARATOR_REGEX, -1);
+            if (fields.length < 3) {
+                return null;
+            }
+            int x = Integer.parseInt(fields[0]);
+            int y = Integer.parseInt(fields[1]);
+            int z = Integer.parseInt(fields[2]);
+            return new BlockPosition(world, x, y, z);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static void decodeLine(String line, Map<BlockPosition, Protection> result) {

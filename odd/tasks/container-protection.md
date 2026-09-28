@@ -49,6 +49,10 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T9 fix(commands): double-chest half divergence (R3-double-chest-half-divergence). Mirror `/protect trust|untrust|remove` onto the other half of a double chest (same material + same owner guard as doors); re-verify the T7(prior)/R1 chest-join-fallback path against the current code. Route: delegated.
 - [x] T10 fix(listeners): hopper rule (R3-hopper-rule-blocks-protected-sources, R2-minecart-doc-misleading). Pulling from a protected source is allowed only when the destination's owner already has access to the source, via the domain `AccessPolicy`, in a pure/testable decision; add `BREWING_STAND` to default containers if real in 26.2; fix misleading Javadoc/README about hopper minecarts. Route: delegated.
 - [x] T11 chore(build): drop the hardcoded `org.gradle.java.home` (R2-gradle-java-home, R3-hardcoded-java-home). Rely on the Java 25 toolchain; document `JAVA_HOME` in the README instead. Route: delegated.
+- [x] T12 fix(persistence): malformed lines must fail closed and never be erased (R3-codec-skip-erases-and-fails-open). Codec result carries decoded entries + raw undecodable lines (re-embedded verbatim on every write); position-extractable corruption denies non-admins at that position with an unknown owner, chunk-wide corruption denies non-admins on every unrecorded protectable block in that chunk; admin bypass still works. Route: delegated.
+- [ ] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
+- [ ] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
+- [ ] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
 
 ## Acceptance criteria
 - A non-owner cannot open, break, or hopper-drain a protected chest.
@@ -393,4 +397,43 @@ built jar.
 - Review lineage `review-44cd79cb66f96489` (base `d85fa43`) found R3-chest-partner-direction-inverted; fixed in `a934516`. The correction exceeded its declared budget (100 vs 80 lines), which produced `scope_changed`. With user authorization, the lineage was abandoned (`operator_disposition`).
 - A fresh review of `d85fa43..a934516` (reliability lens) came back **approved**; the acknowledgement was made and the authority burned. The reviewed boundary is now `a934516`.
 - Open advisories (WARNING, non-blocking): R3-codec-skip-erases-and-fails-open, R3-physics-cleanup-before-final-outcome, R3-posix-permission-test-nondeterministic, R3-service-fail-closed-untested.
+
+### T12 fix(persistence): malformed lines fail closed and are never erased
+
+- `ChunkProtectionCodec.decode` now returns `ChunkDecodeResult(entries,
+  unparseableLines, unknownOwnerPositions, chunkWideCorruption)` instead of a
+  bare `Map`; `encode(entries, preservedRawLines)` re-embeds those raw lines
+  verbatim on every write. TDD: 3 new tests written first (position-extractable
+  corruption reported without touching `entries`; an unrecoverable line sets
+  `chunkWideCorruption`; a preserved raw line survives a re-encode that adds an
+  unrelated entry) → RED (`ChunkDecodeResult`/`unparseableLines` didn't exist,
+  compile failure) → GREEN.
+- New `Protection.UNKNOWN_OWNER` (nil UUID) + `Protection.unknownOwner()`
+  sentinel: no real player is ever assigned the nil UUID, so `AccessPolicy`
+  denies every non-admin against it while admin bypass (checked first) is
+  unaffected. TDD: 2 new tests (`ProtectionTest`, `AccessPolicyTest`) → RED
+  (symbol didn't exist) → GREEN.
+- `ChunkProtectionRepository` now caches a `ChunkRecord` (entries +
+  `preservedRawLines` + `unknownOwnerPositions` + `chunkWideCorruption`)
+  instead of a bare map; `save`/`remove` only ever mutate `entries`, always
+  re-encoding with the same `preservedRawLines` untouched. `find` checks
+  `entries` first, then `unknownOwnerPositions` (denies non-admins at that
+  exact position), then — only if `chunkWideCorruption` — every unrecorded
+  position in the chunk that `AutoProtectPolicy.isAutoProtectable` would
+  currently protect (denies non-admins there too; a plain dirt/stone block is
+  unaffected). Logs one severe warning naming the world+chunk coordinates when
+  chunk-wide corruption is detected. Constructor now takes the existing
+  `ProtectableTypePolicy`/`ProtectionConfig` collaborators (reordered in
+  `EntityProtectionPlugin#onEnable` so they exist before the repository does).
+  No new unit test for the repository itself (needs a live `Chunk`/`World`/
+  `Block`; Paper adapter without a test harness, verified with `./gradlew build`).
+- **Design choice**: recovery is deliberately manual/offline only (edit the
+  region file's chunk NBT) — no new in-game "wipe corruption" command, to
+  avoid an easy way to script away real protection data; a fresh placement at
+  a position-specific corrupted spot naturally "shadows" it going forward
+  since `entries` is checked before `unknownOwnerPositions`. Documented in
+  README's new "Corrupt data" section.
+
+Checks: `./gradlew test` → BUILD SUCCESSFUL, 70 tests, 0 failures (7 new).
+`./gradlew build` → BUILD SUCCESSFUL.
 - Pending: manual in-game verification by the user (README checklist).

@@ -67,6 +67,30 @@ unprotected hopper" setup.
 
 [access-policy]: src/main/java/dev/nerzul/entityprotection/domain/policy/AccessPolicy.java
 
+### Corrupt data
+
+Protection data is text stored in each chunk's `PersistentDataContainer`. If
+that text is ever corrupted (disk/region-file damage, a foreign plugin
+writing over the same key, ...), a malformed line is **never erased**: it is
+kept verbatim and re-written on every future save/remove in that chunk, and
+the plugin fails closed instead of silently unprotecting anything:
+
+- If the line's position (world/x/y/z) can still be read, only *that* block
+  is affected: non-admins are denied there (as if it were owned by an unknown
+  player) until it's fixed.
+- If even the position can't be read, every protectable block in that chunk
+  that has no valid record of its own is denied to non-admins, and the server
+  log names the affected world and chunk coordinates.
+- `entityprotection.admin` always bypasses this, exactly like any other
+  protection.
+
+**Recovery:** placing a fresh container/door at a position-specific corrupted
+spot protects it again going forward (the old corrupt line becomes harmless
+dead data, still preserved but no longer consulted). Recovering a chunk-wide
+corruption, or clearing the leftover dead lines entirely, requires an
+operator to edit the region file's chunk NBT offline (this plugin does not
+ship an in-game repair command, to avoid an easy way to script away real data).
+
 ## Configuration (`config.yml`)
 
 ```yaml

@@ -56,4 +56,13 @@ class AccessPolicyTest {
 
         assertTrue(AccessPolicy.canAccess(stranger, protection, Set.of(), true));
     }
+
+    @Test
+    void unknownOwnerSentinelDeniesEveryRealPlayerButNotAdmins() {
+        Protection unknown = Protection.unknownOwner();
+
+        assertFalse(AccessPolicy.canAccess(stranger, unknown, Set.of(), false));
+        assertFalse(AccessPolicy.canAccess(owner, unknown, Set.of(), false));
+        assertTrue(AccessPolicy.canAccess(stranger, unknown, Set.of(), true));
+    }
 }

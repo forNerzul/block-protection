@@ -38,14 +38,14 @@ public final class EntityProtectionPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        ProtectionRepository protectionRepository = new ChunkProtectionRepository(this);
-        GlobalTrustRepository globalTrustRepository =
-                new YamlGlobalTrustRepository(new File(getDataFolder(), "global-trust.yml"), getLogger());
-        protectionService = new ProtectionService(protectionRepository, globalTrustRepository);
-
         ProtectableTypePolicy classifier = new PaperProtectableTypePolicy();
         ProtectionConfig config = new ProtectionConfig(getConfig());
         Messages messages = new Messages(getConfig());
+
+        ProtectionRepository protectionRepository = new ChunkProtectionRepository(this, classifier, config);
+        GlobalTrustRepository globalTrustRepository =
+                new YamlGlobalTrustRepository(new File(getDataFolder(), "global-trust.yml"), getLogger());
+        protectionService = new ProtectionService(protectionRepository, globalTrustRepository);
 
         registerListeners(classifier, config, messages);
         registerCommand(classifier, config, messages);

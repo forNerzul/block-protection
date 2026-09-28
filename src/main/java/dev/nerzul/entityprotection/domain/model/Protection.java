@@ -14,6 +14,14 @@ import java.util.UUID;
  */
 public final class Protection {
 
+    /**
+     * Sentinel owner for a protection record that could not be safely decoded
+     * (e.g. storage corruption): no real player is ever assigned the nil UUID,
+     * so {@link dev.nerzul.entityprotection.domain.policy.AccessPolicy} denies
+     * every non-admin against it while admin bypass (checked first) still works.
+     */
+    public static final UUID UNKNOWN_OWNER = new UUID(0L, 0L);
+
     private final UUID owner;
     private final Set<UUID> trustedPlayers;
 
@@ -24,6 +32,11 @@ public final class Protection {
     public Protection(UUID owner, Set<UUID> trustedPlayers) {
         this.owner = Objects.requireNonNull(owner, "owner must not be null");
         this.trustedPlayers = new HashSet<>(Objects.requireNonNull(trustedPlayers, "trustedPlayers must not be null"));
+    }
+
+    /** @return a protection owned by the {@link #UNKNOWN_OWNER} sentinel. */
+    public static Protection unknownOwner() {
+        return new Protection(UNKNOWN_OWNER);
     }
 
     public UUID owner() {
