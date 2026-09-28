@@ -1,0 +1,22 @@
+# EntityProtection configuration
+
+# When true, doors, trapdoors and fence gates are auto-protected on place,
+# exactly like containers. Off by default.
+protect-doors: false
+
+messages:
+  protected-place: "&aThis block is now protected. Only you (and trusted players) can use it."
+  no-access: "&cThis block is protected by &e%owner%&c."
+  not-owner: "&cOnly the owner can do that."
+  trust-single-added: "&aTrusted %player% on this block."
+  trust-single-removed: "&aRemoved %player% from this block's trust list."
+  trust-all-added: "&aTrusted %player% on all of your protections."
+  trust-all-removed: "&aRemoved %player% from all of your protections."
+  removed: "&aProtection removed."
+  info-header: "&7--- Protection info ---"
+  info-owner: "&7Owner: &f%owner%"
+  info-trusted: "&7Trusted: &f%trusted%"
+  not-protected: "&cThat block is not protected."
+  no-target-block: "&cYou must be looking at a block within 5 blocks."
+  not-protectable: "&cThat block cannot be protected."
+  player-not-found: "&cPlayer not found. They must be online, or have played on this server before."
