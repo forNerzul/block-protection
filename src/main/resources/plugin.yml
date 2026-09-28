@@ -1,6 +1,6 @@
-name: EntityProtection
+name: BlockProtection
 version: '${version}'
-main: dev.nerzul.entityprotection.EntityProtectionPlugin
+main: dev.nerzul.blockprotection.BlockProtectionPlugin
 api-version: '26.2'
 author: Nerzul
 description: Protects blocks a player places (containers, and optionally doors) so only the owner and trusted players can access them.
@@ -9,12 +9,12 @@ commands:
   protect:
     description: Manage protection on the block you are looking at.
     usage: /protect <trust|untrust|trustall|untrustall> <player> | /protect <info|remove>
-    permission: entityprotection.use
+    permission: blockprotection.use
 
 permissions:
-  entityprotection.use:
+  blockprotection.use:
     description: Allows using /protect and owning protections on placed blocks.
     default: true
-  entityprotection.admin:
+  blockprotection.admin:
     description: Allows bypassing every protection (open, break, trust management on any block).
     default: op

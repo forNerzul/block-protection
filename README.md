@@ -1,4 +1,4 @@
-# EntityProtection
+# BlockProtection
 
 A small Paper plugin for a family server: containers a player places are
 automatically protected, so only the owner (and players they trust) can open,
@@ -7,6 +7,9 @@ problem without a full land-claim plugin.
 
 Out of scope: real entities (mobs, item frames, armor stands) and
 region/land claims. Only blocks are protected.
+
+> Renamed from EntityProtection before its first public release; data stored
+> by the old name is not migrated.
 
 ## Features
 
@@ -42,7 +45,8 @@ region/land claims. Only blocks are protected.
     `PersistentDataContainer` of the chunk the block belongs to. This works
     even for blocks with no block entity of their own, such as doors.
   - Per-owner *global* trust (players an owner trusts on every one of their
-    protections) is stored in `global-trust.yml` in the plugin's data folder.
+    protections) is stored in `global-trust.yml` in the plugin's data folder
+    (`plugins/BlockProtection/global-trust.yml` on a typical server).
 - Players are identified by UUID everywhere (the server runs
   `online-mode: false`); name lookups only ever consult online players and
   Bukkit's local offline-player records, never the Mojang API.
@@ -65,7 +69,7 @@ always left allowed, since it cannot leak anything from the protected side
 and would otherwise break the common "feed a protected chest from an
 unprotected hopper" setup.
 
-[access-policy]: src/main/java/dev/nerzul/entityprotection/domain/policy/AccessPolicy.java
+[access-policy]: src/main/java/dev/nerzul/blockprotection/domain/policy/AccessPolicy.java
 
 ### Corrupt data
 
@@ -81,7 +85,7 @@ the plugin fails closed instead of silently unprotecting anything:
 - If even the position can't be read, every protectable block in that chunk
   that has no valid record of its own is denied to non-admins, and the server
   log names the affected world and chunk coordinates.
-- `entityprotection.admin` always bypasses this, exactly like any other
+- `blockprotection.admin` always bypasses this, exactly like any other
   protection.
 
 **Recovery:** placing a fresh container/door at a position-specific corrupted
@@ -124,8 +128,8 @@ trust list and need no target block).
 
 | Permission | Default | Effect |
 |---|---|---|
-| `entityprotection.use` | `true` | Use `/protect` and own protections on blocks you place. |
-| `entityprotection.admin` | `op` | Bypass every protection: open/use/break any block, and manage trust/removal on any block regardless of owner. |
+| `blockprotection.use` | `true` | Use `/protect` and own protections on blocks you place. |
+| `blockprotection.admin` | `op` | Bypass every protection: open/use/break any block, and manage trust/removal on any block regardless of owner. |
 
 ## Building
 
@@ -139,7 +143,7 @@ auto-provisioning) on most machines without any extra setup.
 ./gradlew build
 ```
 
-The plugin jar is produced at `build/libs/entity-protection-1.0.0.jar`.
+The plugin jar is produced at `build/libs/block-protection-1.0.0.jar`.
 
 Run just the tests with `./gradlew test`.
 
@@ -158,7 +162,7 @@ machines and CI:
 1. Build the jar (above).
 2. Copy it into the server's plugin folder:
    ```bash
-   cp build/libs/entity-protection-1.0.0.jar <server>/data/plugins/
+   cp build/libs/block-protection-1.0.0.jar <server>/data/plugins/
    ```
 3. Restart the server so Paper loads the new/updated jar:
    ```bash
@@ -169,7 +173,7 @@ machines and CI:
 
 ## Manual in-game test checklist
 
-Use two accounts (or `entityprotection.admin` on one and a fresh alt for the
+Use two accounts (or `blockprotection.admin` on one and a fresh alt for the
 other) to verify the acceptance criteria:
 
 - [ ] Player A places a chest. Player B (no trust, no admin) cannot open it;
@@ -202,5 +206,5 @@ other) to verify the acceptance criteria:
       all of the above protections are still in place.
 - [ ] Player A (or admin) runs `/protect remove` on their chest; it is now
       open to anyone, matching an unprotected block.
-- [ ] An admin (`entityprotection.admin`) can open, break, trust and remove
+- [ ] An admin (`blockprotection.admin`) can open, break, trust and remove
       protection on a block they do not own.

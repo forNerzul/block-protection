@@ -53,6 +53,7 @@ Real entities (mobs, item frames, armor stands), region/land claims.
 - [x] T13 fix(listeners): run BlockDestroyEvent cleanup only on the final outcome (R3-physics-cleanup-before-final-outcome). `ProtectionPhysicsCleanupListener` moves to `MONITOR` priority; audit other cleanup/removal listeners for the same premature-deletion pattern. Route: delegated.
 - [x] T14 test(persistence): deterministic rollback trigger (R3-posix-permission-test-nondeterministic). Replace the POSIX-permission save-failure trick in `YamlGlobalTrustRepositoryTest` with an OS/root-independent deterministic failure. Route: delegated.
 - [x] T15 test(domain): cover `ProtectionService` fail-closed paths (R3-service-fail-closed-untested). Throwing fakes covering `canTransfer`/`canAccess`/`isProtected`/`trustAll`/`untrustAll` error paths; fix any bug a test uncovers in the same commit. Route: delegated.
+- [x] T16 refactor: rename plugin `entity-protection`/`EntityProtection` → `block-protection`/`BlockProtection` (the plugin protects blocks, not entities). Java package `dev.nerzul.entityprotection` → `dev.nerzul.blockprotection` (main+test, moved with `git mv`), main class `EntityProtectionPlugin` → `BlockProtectionPlugin`, `plugin.yml`/permissions/`ADMIN_PERMISSION`, `settings.gradle.kts` project name, `config.yml`/README/log messages/Javadoc. No migration code; existing test data under the old name is expected to be orphaned (user-accepted). This task file keeps its name (`container-protection.md`) and history unchanged; only this doc's own prose is renamed where it refers to the plugin. Route: delegated (writer trigger, ~47 files).
 
 ## Acceptance criteria
 - A non-owner cannot open, break, or hopper-drain a protected chest.
@@ -501,5 +502,49 @@ production code changed.
 
 Checks: `./gradlew test` → BUILD SUCCESSFUL, 78 tests, 0 failures (8 new).
 `./gradlew build` → BUILD SUCCESSFUL.
+
+### T16 refactor: rename plugin to block-protection
+
+User-decided full rename: the plugin protects blocks, not entities. This task
+file (`odd/tasks/container-protection.md`) intentionally keeps its own name
+and git history; only its prose below and above refers to the renamed
+plugin going forward.
+
+- `git mv`'d `src/{main,test}/java/dev/nerzul/entityprotection` →
+  `.../dev/nerzul/blockprotection` (whole-directory moves, history preserved
+  per file) and `EntityProtectionPlugin.java` → `BlockProtectionPlugin.java`
+  inside the moved main-package directory.
+- Applied three case-sensitive text substitutions across every `.java` file,
+  `plugin.yml`, `config.yml`, `settings.gradle.kts` and `README.md`:
+  `entity-protection`→`block-protection`, `entityprotection`→`blockprotection`,
+  `EntityProtection`→`BlockProtection` (the last one also turns
+  `EntityProtectionPlugin` into `BlockProtectionPlugin` everywhere it's
+  referenced/imported, since it's a substring match).
+- `plugin.yml`: `name: BlockProtection`, `main:
+  dev.nerzul.blockprotection.BlockProtectionPlugin`, permissions
+  `blockprotection.use`/`blockprotection.admin`.
+  `ProtectionAccessListener.ADMIN_PERMISSION` now
+  `"blockprotection.admin"`. `settings.gradle.kts`: `rootProject.name =
+  "block-protection"` (version stays `1.0.0`), so the jar is
+  `build/libs/block-protection-1.0.0.jar`.
+- `NamespacedKey` namespace: unchanged code
+  (`new NamespacedKey(plugin, "protections")` in `ChunkProtectionRepository`)
+  now derives `"blockprotection"` automatically from the renamed
+  `plugin.yml` name — verified by inspecting the built jar's `plugin.yml`
+  (`name: BlockProtection`) rather than assumed.
+- README: title, jar filename/paths, permissions table, data-folder path
+  (`plugins/BlockProtection/global-trust.yml`), and a new note right under
+  the intro: "Renamed from EntityProtection before its first public release;
+  data stored by the old name is not migrated." No migration code was
+  written (explicitly out of scope; orphaned old-name data accepted).
+- Verified `rg -i "entity.?protection"` over the whole repo returns matches
+  in exactly two files: this task doc (historical task evidence, left
+  untouched) and that one README note — nothing else.
+
+Checks: `./gradlew clean build` → BUILD SUCCESSFUL, 78 tests, 0 failures
+(same count as before the rename — pure rename, no logic changed).
+`build/libs/block-protection-1.0.0.jar` exists; its bundled `plugin.yml`
+shows `name: BlockProtection`, `version: '1.0.0'`,
+`main: dev.nerzul.blockprotection.BlockProtectionPlugin`.
 
 - Pending: manual in-game verification by the user (README checklist).

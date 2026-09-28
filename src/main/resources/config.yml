@@ -1,4 +1,4 @@
-# EntityProtection configuration
+# BlockProtection configuration
 
 # When true, doors, trapdoors and fence gates are auto-protected on place,
 # exactly like containers. Off by default.

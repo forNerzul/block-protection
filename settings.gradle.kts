@@ -1,1 +1,1 @@
-rootProject.name = "entity-protection"
+rootProject.name = "block-protection"
