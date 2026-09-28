@@ -9,6 +9,7 @@ import dev.nerzul.entityprotection.domain.service.ProtectionService;
 import dev.nerzul.entityprotection.paper.config.Messages;
 import dev.nerzul.entityprotection.paper.config.ProtectionConfig;
 import dev.nerzul.entityprotection.paper.util.BlockPositions;
+import dev.nerzul.entityprotection.paper.util.ChestJoinDirection;
 import dev.nerzul.entityprotection.paper.util.DoorHalves;
 import dev.nerzul.entityprotection.paper.util.PlayerNames;
 import org.bukkit.block.Block;
@@ -114,20 +115,9 @@ public final class ProtectionPlaceListener implements Listener {
         event.getPlayer().sendMessage(messages.protectedPlace());
     }
 
-    /**
-     * Finds the joined neighbor via the exact, deterministic partner direction
-     * for our own facing and {@code Chest.Type} (LEFT/RIGHT) — never by
-     * scanning and trusting the neighbor's own {@code Chest.Type}, which may
-     * still read {@code SINGLE} here (that shape update can be deferred past
-     * this event).
-     *
-     * <p>Vanilla connects a chest to the neighbor reached by rotating its own
-     * facing clockwise for a RIGHT half, or counter-clockwise for a LEFT half
-     * (clockwise cycle, viewed from above: NORTH -&gt; EAST -&gt; SOUTH -&gt; WEST
-     * -&gt; NORTH).
-     */
+    /** Finds the joined neighbor via {@link ChestJoinDirection}, not the neighbor's own (possibly stale) {@code Chest.Type}. */
     private Block findJoinedNeighbor(Block block, Chest chestData) {
-        BlockFace direction = connectedDirection(chestData.getFacing(), chestData.getType());
+        BlockFace direction = ChestJoinDirection.partnerDirection(chestData.getFacing(), chestData.getType());
         Block candidate = block.getRelative(direction);
         if (candidate.getType() != block.getType()) {
             return null;
@@ -139,29 +129,5 @@ public final class ProtectionPlaceListener implements Listener {
             return null;
         }
         return candidate;
-    }
-
-    private BlockFace connectedDirection(BlockFace facing, Chest.Type type) {
-        return type == Chest.Type.LEFT ? counterClockwise(facing) : clockwise(facing);
-    }
-
-    private BlockFace clockwise(BlockFace facing) {
-        return switch (facing) {
-            case NORTH -> BlockFace.EAST;
-            case EAST -> BlockFace.SOUTH;
-            case SOUTH -> BlockFace.WEST;
-            case WEST -> BlockFace.NORTH;
-            default -> facing;
-        };
-    }
-
-    private BlockFace counterClockwise(BlockFace facing) {
-        return switch (facing) {
-            case NORTH -> BlockFace.WEST;
-            case WEST -> BlockFace.SOUTH;
-            case SOUTH -> BlockFace.EAST;
-            case EAST -> BlockFace.NORTH;
-            default -> facing;
-        };
     }
 }

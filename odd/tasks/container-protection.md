@@ -378,6 +378,11 @@ Checks: `./gradlew clean build` → BUILD SUCCESSFUL, 56 tests, 0 failures
 (same as T10 — no code changed, only `gradle.properties` removed and the
 README updated).
 
+### Correction: R3-chest-partner-direction-inverted (post-T9)
+Fixed T9's inverted LEFT/RIGHT↔clockwise chest-partner mapping (was backwards
+vs. vanilla `ChestBlock#getConnectedDirection`) in new, TDD-tested
+`paper.util.ChestJoinDirection` (9 cases, red→green); 65 tests, build green.
+
 ## Next step
 All authorized work (T7-T11) is implemented. Feature complete pending the
 user's manual in-game verification (README checklist) after deploying the
