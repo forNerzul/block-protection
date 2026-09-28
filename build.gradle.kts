@@ -21,6 +21,10 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // Real Paper server provides this API at runtime (hence compileOnly above);
+    // tests run without a server, so pull it (and its YAML support) onto the
+    // test classpath explicitly for the few adapters that touch YamlConfiguration.
+    testImplementation("io.papermc.paper:paper-api:26.2.build.129-stable")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
